@@ -19,9 +19,18 @@ path = "src/main.rs"
 # the compat ruleset download are unaffected. Turn it back on with `--features cloud_sync`.
 default = []
 cloud_sync = ["mythbrowse-engine/cloud_sync"]
+# Official JustMyth builds: profile folder `MythBrowse`, key-store labels, toast id and update
+# channel of the official build. Off (default) = "MythBrowse (Open Build)", which keeps its data,
+# keys and updates completely separate so both can be installed side by side.
+official = [
+    "mythbrowse-ai/official",
+    "mythbrowse-notify/official",
+    "mythbrowse-storage/official",
+    "mythbrowse-update/official",
+]
 # Official JustMyth builds only: set by the private overlay that adds the proprietary Myth
 # agent host in place of the chat-only src/ai_host.rs. Fails to build without that overlay.
-agent = []
+agent = ["official"]
 
 [dependencies]
 mythbrowse-engine = { workspace = true, features = ["servo"] }

@@ -176,17 +176,22 @@ jobs:
           $m = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1
           if (-not $m) { throw "no version in Cargo.toml" }
           $ver = $m.Matches[0].Groups[1].Value
-          $msi = "dist\MythBrowse-OSS-$ver-$($env:GITHUB_SHA.Substring(0, 8))-x64.msi"
+          # Release asset name of the open build: its updater (Channel::Open) only takes `OpenBuild` names.
+          $msi = "dist\MythBrowse-OpenBuild-$ver-x64.msi"
           wix build packaging/windows/mythbrowse.wxs -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -d "Version=$ver" -d "SourceDir=$env:PKGDIR" -o $msi
           if ($LASTEXITCODE -ne 0) { throw "wix build failed ($LASTEXITCODE)" }
           Get-Item $msi | Format-Table Name, Length
+          $h = (Get-FileHash $msi -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$h  $(Split-Path $msi -Leaf)" | Out-File -FilePath "$msi.sha256" -Encoding ascii -NoNewline
           "MSI=$((Resolve-Path $msi).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - uses: actions/upload-artifact@v4
         if: steps.msi.outcome == 'success'
         continue-on-error: true
         with:
           name: mythbrowse-oss-windows-msi
-          path: ${{ env.MSI }}
+          path: |
+            ${{ env.MSI }}
+            ${{ env.MSI }}.sha256
           if-no-files-found: error
           retention-days: 7
       - name: Test light crates on Windows (no Servo)

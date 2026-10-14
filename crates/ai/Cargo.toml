@@ -9,6 +9,11 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Official JustMyth builds only (the shell's `official` feature turns it on). Off = the open-source
+# "MythBrowse (Open Build)": its own profile folder, key-store labels and update channel.
+official = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -20,8 +25,8 @@ zeroize = "1.8"
 # Blocking HTTP with streaming bodies; TLS via rustls using the process-wide crypto provider
 # (the shell installs aws-lc-rs, as Servo does), web PKI roots bundled.
 ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
-# Screenshots for vision models: downscale, set-of-marks overlay, JPEG encode (pure Rust; the
-# same version Servo already pulls in, so nothing new is compiled for the shell).
+# Image encoding (pure Rust; the same version Servo already pulls in, so nothing new is
+# compiled for the shell).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 base64 = "0.22"
 

@@ -215,7 +215,13 @@ mod dpapi {
     };
 
     /// Extra entropy so other apps using DPAPI for the same user cannot trivially decrypt.
-    const ENTROPY: &[u8] = b"MythBrowse/secrets/v1";
+    /// Differs between the open build and official builds, so neither can open the other's keys
+    /// (the vault key and the sealed cookie-jar key live in this store).
+    const ENTROPY: &[u8] = if cfg!(feature = "official") {
+        b"MythBrowse/secrets/v1"
+    } else {
+        b"MythBrowse Open Build/secrets/v1"
+    };
 
     fn blob(data: &[u8]) -> CRYPT_INTEGER_BLOB {
         CRYPT_INTEGER_BLOB {
@@ -339,7 +345,17 @@ mod secret_tool {
 
     use super::{Secret, SecretError};
 
-    const SERVICE: &str = "mythbrowse";
+    /// Secret Service `service` attribute: separate for the open build and official builds.
+    const SERVICE: &str = if cfg!(feature = "official") {
+        "mythbrowse"
+    } else {
+        "mythbrowse-open"
+    };
+    const LABEL: &str = if cfg!(feature = "official") {
+        "MythBrowse"
+    } else {
+        "MythBrowse (Open Build)"
+    };
 
     pub fn available() -> bool {
         Command::new("secret-tool")
@@ -352,7 +368,7 @@ mod secret_tool {
 
     pub fn store(name: &str, value: &Secret) -> Result<(), SecretError> {
         let mut child = Command::new("secret-tool")
-            .args(["store", "--label", &format!("MythBrowse: {name}")])
+            .args(["store", "--label", &format!("{LABEL}: {name}")])
             .args(["service", SERVICE, "account", name])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())

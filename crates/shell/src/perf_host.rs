@@ -7,7 +7,7 @@
 //! of the chrome, in its own composition (sky, blur, glass, layers) and in `present()`, and
 //! how long a wheel / autoscroll input took to reach the screen (`engine::perf`). Once a
 //! second one summary line goes to the HUD (a small box drawn by the chrome, bottom left) and
-//! to `perf.log` in the profile folder (`%LOCALAPPDATA%\MythBrowse\perf.log`), together with
+//! to `perf.log` in the profile folder (`<profile>\perf.log`), together with
 //! the renderer line, so a report from a real device carries numbers.
 //!
 //! Off by default; when off, nothing is measured beyond one `Cell` read per frame.

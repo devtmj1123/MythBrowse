@@ -4,6 +4,9 @@
 //! A GitHub release (`GET /repos/{owner}/{repo}/releases/latest`, read-only, no token) and the
 //! choice of what to install from it.
 //!
+//! * Channel: the open-source Open Build installs only assets whose name carries the
+//!   `OpenBuild` token (`MythBrowse-OpenBuild-0.4.2-x64.msi`); official builds (feature
+//!   `official`) ignore those. Both read the same repository's releases.
 //! * Installer: the `.msi` asset for this machine. Names with another architecture
 //!   (`arm64`, `aarch64`, `x86`/`i686`/`win32` on x64) are skipped; among the rest an asset
 //!   naming this architecture wins over a neutral one, and a `MythBrowse…` name over others.
@@ -104,8 +107,42 @@ fn names_arch(name: &str, arch: Arch) -> bool {
         .any(|tag| t.iter().any(|x| x == tag) || (tag.contains('-') && lower.contains(tag)))
 }
 
-/// The installer to download for `arch`, if the release has one.
+/// Token in the installer name of open-source builds: `MythBrowse-OpenBuild-0.4.2-x64.msi`.
+pub const OPEN_BUILD_TOKEN: &str = "openbuild";
+
+/// Which installers a build may update itself with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Channel {
+    /// The open-source "MythBrowse (Open Build)": only `…OpenBuild…` installers.
+    Open,
+    /// Official JustMyth builds: every installer except the open build's.
+    Official,
+}
+
+impl Channel {
+    /// This build's channel (feature `official`).
+    pub const fn current() -> Channel {
+        if cfg!(feature = "official") {
+            Channel::Official
+        } else {
+            Channel::Open
+        }
+    }
+
+    /// Whether an asset named `name` belongs to this channel.
+    pub fn accepts(self, name: &str) -> bool {
+        let open = tokens(name).iter().any(|t| t == OPEN_BUILD_TOKEN);
+        open == (self == Channel::Open)
+    }
+}
+
+/// The installer to download for `arch` on this build's [`Channel`], if the release has one.
 pub fn pick_installer(assets: &[Asset], arch: Arch) -> Option<&Asset> {
+    pick_installer_for(assets, arch, Channel::current())
+}
+
+/// The installer to download for `arch` on `channel`, if the release has one.
+pub fn pick_installer_for(assets: &[Asset], arch: Arch, channel: Channel) -> Option<&Asset> {
     let others: Vec<Arch> = [Arch::X64, Arch::Arm64, Arch::X86]
         .into_iter()
         .filter(|a| *a != arch)
@@ -113,6 +150,7 @@ pub fn pick_installer(assets: &[Asset], arch: Arch) -> Option<&Asset> {
     assets
         .iter()
         .filter(|a| a.name.to_ascii_lowercase().ends_with(".msi"))
+        .filter(|a| channel.accepts(&a.name))
         .filter(|a| {
             // "x86_64" also contains the x86 tag as a token prefix only, never as a token.
             names_arch(&a.name, arch) || !others.iter().any(|o| names_arch(&a.name, *o))
@@ -240,30 +278,81 @@ mod tests {
             asset("MythBrowse-0.4.0.zip"),
         ];
         assert_eq!(
-            pick_installer(&a, Arch::X64).unwrap().name,
+            pick_installer_for(&a, Arch::X64, Channel::Official)
+                .unwrap()
+                .name,
             "MythBrowse-0.4.0-x64.msi"
         );
         assert_eq!(
-            pick_installer(&a, Arch::Arm64).unwrap().name,
+            pick_installer_for(&a, Arch::Arm64, Channel::Official)
+                .unwrap()
+                .name,
             "MythBrowse-0.4.0-arm64.msi"
         );
-        assert!(pick_installer(&a, Arch::X86).is_none());
+        assert!(pick_installer_for(&a, Arch::X86, Channel::Official).is_none());
         // A neutral name is fine when nothing names this arch; x86_64 is x64, not x86.
         let b = [asset("MythBrowse.msi"), asset("mythbrowse-x86_64.MSI")];
         assert_eq!(
-            pick_installer(&b, Arch::X64).unwrap().name,
+            pick_installer_for(&b, Arch::X64, Channel::Official)
+                .unwrap()
+                .name,
             "mythbrowse-x86_64.MSI"
         );
         assert_eq!(
-            pick_installer(&b, Arch::X86).unwrap().name,
+            pick_installer_for(&b, Arch::X86, Channel::Official)
+                .unwrap()
+                .name,
             "MythBrowse.msi"
         );
         let c = [asset("Other.msi"), asset("MythBrowse.msi")];
         assert_eq!(
-            pick_installer(&c, Arch::X64).unwrap().name,
+            pick_installer_for(&c, Arch::X64, Channel::Official)
+                .unwrap()
+                .name,
             "MythBrowse.msi"
         );
-        assert!(pick_installer(&[asset("MythBrowse.exe")], Arch::X64).is_none());
+        assert!(
+            pick_installer_for(&[asset("MythBrowse.exe")], Arch::X64, Channel::Official).is_none()
+        );
+    }
+
+    #[test]
+    fn open_and_official_channels_do_not_mix() {
+        let a = [
+            asset("MythBrowse-0.4.2-x64.msi"),
+            asset("MythBrowse-OpenBuild-0.4.2-x64.msi"),
+            asset("MythBrowse-OpenBuild-0.4.2-x64.msi.sha256"),
+            asset("MythBrowse-OpenBuild-0.4.2-arm64.msi"),
+        ];
+        assert_eq!(
+            pick_installer_for(&a, Arch::X64, Channel::Open)
+                .unwrap()
+                .name,
+            "MythBrowse-OpenBuild-0.4.2-x64.msi"
+        );
+        assert_eq!(
+            pick_installer_for(&a, Arch::Arm64, Channel::Open)
+                .unwrap()
+                .name,
+            "MythBrowse-OpenBuild-0.4.2-arm64.msi"
+        );
+        assert_eq!(
+            pick_installer_for(&a, Arch::X64, Channel::Official)
+                .unwrap()
+                .name,
+            "MythBrowse-0.4.2-x64.msi"
+        );
+        // An official build never installs the open build, and the other way round.
+        assert!(pick_installer_for(&a, Arch::Arm64, Channel::Official).is_none());
+        let official_only = [asset("MythBrowse-0.4.2-x64.msi")];
+        assert!(pick_installer_for(&official_only, Arch::X64, Channel::Open).is_none());
+        // Case does not matter; a word merely containing it is not the token.
+        assert!(Channel::Open.accepts("mythbrowse.OPENBUILD.x64.MSI"));
+        assert!(!Channel::Open.accepts("MythBrowse-OpenBuilder-x64.msi"));
+        assert_eq!(
+            pick_installer(&a, Arch::X64).map(|x| Channel::current().accepts(&x.name)),
+            Some(true)
+        );
     }
 
     #[test]

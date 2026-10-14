@@ -22,11 +22,11 @@ from the Myth mark: 44, 50, 71, 150, 310×150, 310 px) are packed by `ci/msix-wi
 Windows SDK's `makeappx.exe`.
 
 - **Package identity lives in one place: `msix/identity.json`** (Name, Publisher, DisplayName,
-  PublisherDisplayName). Placeholders `JustMyth.MythBrowse` / `CN=JustMyth-Dev` until the app is
+  PublisherDisplayName). Placeholders `JustMyth.MythBrowse.OpenBuild` / `CN=JustMyth-Dev` (the open build's identity; official JustMyth packages use their own) until the app is
   registered in Partner Center; then paste the values from Product identity there. Version is
   Cargo.toml's `a.b.c` as `a.b.c.0`.
 - Outputs: the unsigned `.msix` (for Partner Center; the Store signs it), a copy signed with a
   throwaway self-signed cert made in CI (subject = Publisher) and its `.cer` for sideload tests
   (import the .cer into Local Machine > Trusted People, then open the -testsigned.msix).
-- Under MSIX, writes to `%LOCALAPPDATA%\MythBrowse` (the profile) are redirected to
-  `%LOCALAPPDATA%\Packages\<family>\LocalCache\Local\MythBrowse` and removed on uninstall.
+- Under MSIX, writes to `%LOCALAPPDATA%\MythBrowse Open Build` (the profile) are redirected to
+  `%LOCALAPPDATA%\Packages\<family>\LocalCache\Local\MythBrowse Open Build` and removed on uninstall.

@@ -22,7 +22,7 @@ exclude = ["third_party"]
 default-members = ["crates/shell"]
 
 [workspace.package]
-version = "0.0.1"
+version = "0.4.2"
 edition = "2024"
 # Servo 0.1.x requires rustc >= 1.86; the pinned toolchain (rust-toolchain.toml) matches Servo's own.
 rust-version = "1.86"

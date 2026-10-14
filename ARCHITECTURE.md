@@ -61,6 +61,13 @@ What is open and what is not is decided at two seams, both visible in this repos
    provider, hidden agent tabs, its tools and its agent-specific safeguards. The rest of the
    shell is the same code in both builds. Enabling `agent` in this repository stops the build
    with a clear error (`compile_error!`) because the private overlay is absent.
+3. **The `official` cargo feature** (shell, forwarded to `mythbrowse-{ai,notify,storage,update}`;
+   implied by `agent`). Off (this repository) builds **MythBrowse (Open Build)**, which shares
+   no data with official builds: profile folder `%LOCALAPPDATA%\MythBrowse Open Build` /
+   `$XDG_DATA_HOME/mythbrowse-open` (`MYTHBROWSE_PROFILE_DIR` overrides), its own key-store
+   labels, notification id `JustMyth.MythBrowse.OpenBuild`, and update channel (installs only
+   `MythBrowse-OpenBuild-*.msi` release assets). The MSI identity is set the same way through
+   WiX `-d` variables whose defaults are the Open Build's (`packaging/windows/mythbrowse.wxs`).
 
 Safeguards that protect ordinary browsing are open and active in every build: the internal RPC
 answers only requests carrying the per-session token that only the browser's own pages receive;

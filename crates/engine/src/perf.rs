@@ -3,8 +3,8 @@
 //! Frame timing for the shell's perf HUD and trace (`MB_PERF=1`, or Ctrl+Shift+F12 at run
 //! time): per presented frame, how long the shell spent where, and how long a wheel / scroll
 //! input took to reach the screen. Summarised once a second into one line, shown in the HUD
-//! and appended to `perf.log` in the app's data folder (`%LOCALAPPDATA%\MythBrowse\perf.log`
-//! on Windows), so a report from a real device carries numbers instead of "it is laggy".
+//! and appended to `perf.log` in the app's data folder (`<profile>\perf.log`,
+//! see `mythbrowse_storage::default_profile_dir`), so a report from a real device carries numbers instead of "it is laggy".
 //!
 //! Pure (times passed in, ms `f64`), unit-tested; the shell owns the clock and the file.
 

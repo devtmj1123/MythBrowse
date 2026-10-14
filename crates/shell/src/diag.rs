@@ -8,7 +8,7 @@
 //! process already has a usable stderr (redirected by a script or CI) or `--console` /
 //! `MYTHBROWSE_CONSOLE=1` asks for a console, stdout and stderr (Servo's log output, Rust
 //! panic messages) are redirected into `<profile>/logs/mythbrowse.log`, i.e.
-//! `%LOCALAPPDATA%\MythBrowse\logs\mythbrowse.log`. A panic on the main thread and every
+//! `%LOCALAPPDATA%\MythBrowse Open Build\logs\mythbrowse.log` (`MythBrowse` in official builds). A panic on the main thread and every
 //! fatal start-up error are also written there and shown in a native error dialog, so the
 //! browser never just vanishes.
 
@@ -45,14 +45,18 @@ pub fn take_flags(args: &mut Vec<String>) -> Flags {
 fn log_dir() -> PathBuf {
     mythbrowse_storage::default_profile_dir()
         .map(|d| d.join("logs"))
-        .unwrap_or_else(|| std::env::temp_dir().join("MythBrowse").join("logs"))
+        .unwrap_or_else(|| {
+            std::env::temp_dir()
+                .join(mythbrowse_storage::PROFILE_DIR_NAME)
+                .join("logs")
+        })
 }
 
-/// `<profile>/perf.log` (`%LOCALAPPDATA%\MythBrowse\perf.log` on Windows): the perf trace
+/// `<profile>/perf.log` (`%LOCALAPPDATA%\MythBrowse Open Build\perf.log` on Windows): the perf trace
 /// (`perf_host`), appended across runs.
 pub fn perf_log_path() -> PathBuf {
     mythbrowse_storage::default_profile_dir()
-        .unwrap_or_else(|| std::env::temp_dir().join("MythBrowse"))
+        .unwrap_or_else(|| std::env::temp_dir().join(mythbrowse_storage::PROFILE_DIR_NAME))
         .join("perf.log")
 }
 

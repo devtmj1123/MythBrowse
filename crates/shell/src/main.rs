@@ -41,7 +41,7 @@
 //!
 //! Release builds on Windows have no console window; `--console` (or `MYTHBROWSE_CONSOLE=1`)
 //! attaches to / opens one for debug output. Otherwise logs go to
-//! `%LOCALAPPDATA%\MythBrowse\logs\mythbrowse.log` (see `diag`). The UI files are embedded in
+//! `<profile>\logs\mythbrowse.log` (see `diag`; `%LOCALAPPDATA%\MythBrowse Open Build` in the open build). The UI files are embedded in
 //! the binary; `MYTHBROWSE_UI_DIR=<dir>` serves them from disk instead (UI development).
 //! `MYTHBROWSE_THEME_HOUR=<0..24>` pins the time-of-day theme (screenshots, UI work).
 

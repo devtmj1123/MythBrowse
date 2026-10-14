@@ -3682,7 +3682,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-ai"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -3701,11 +3701,11 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-blocker"
-version = "0.0.1"
+version = "0.4.2"
 
 [[package]]
 name = "mythbrowse-compat"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
@@ -3719,7 +3719,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-engine"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "euclid",
  "serde",
@@ -3730,7 +3730,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-files"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "log",
  "serde",
@@ -3742,7 +3742,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-notify"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "log",
  "windows 0.61.3",
@@ -3750,7 +3750,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-passwords"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -3767,7 +3767,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-shell"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "base64 0.22.1",
  "cookie 0.18.1",
@@ -3799,7 +3799,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-storage"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "getrandom 0.2.17",
  "mythbrowse-sync",
@@ -3815,7 +3815,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-sync"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -3835,7 +3835,7 @@ dependencies = [
 
 [[package]]
 name = "mythbrowse-update"
-version = "0.0.1"
+version = "0.4.2"
 dependencies = [
  "log",
  "serde",

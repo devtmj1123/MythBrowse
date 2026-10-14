@@ -9,6 +9,11 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Official JustMyth builds only (the shell's `official` feature turns it on). Off = the open-source
+# "MythBrowse (Open Build)": its own profile folder, key-store labels and update channel.
+official = []
+
 [dependencies]
 log.workspace = true
 

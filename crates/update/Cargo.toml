@@ -11,6 +11,11 @@ publish.workspace = true
 
 # No Servo and no SQLite: tested on its own (`cargo test -p mythbrowse-update`). The shell glues
 # it to Settings > About (crates/shell/src/settings_host.rs).
+[features]
+# Official JustMyth builds only (the shell's `official` feature turns it on). Off = the open-source
+# "MythBrowse (Open Build)": its own profile folder, key-store labels and update channel.
+official = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

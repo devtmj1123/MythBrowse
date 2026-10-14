@@ -2,7 +2,7 @@
 
 All notable changes to the open-source MythBrowse are listed here.
 
-## Unreleased: open-source release candidate (0.4.x)
+## 0.4.2: open-source release (tag `v0.4.2`)
 
 First public release of the MythBrowse source under the Mozilla Public License 2.0.
 
@@ -18,6 +18,19 @@ First public release of the MythBrowse source under the Mozilla Public License 2
   boundary at which official builds add the proprietary Myth agent.
 - Settings > Site compatibility > **Rule updates** ("Automatically update site-fix rules") (on by default; builds from this
   repository have no update server configured).
+
+### Open Build identity (separate from official JustMyth builds)
+
+- Version 0.4.2 everywhere (Cargo workspace, Windows version resource, MSI).
+- Installs and runs side by side with an official MythBrowse and shares nothing with it: its
+  own profile folder (`%LOCALAPPDATA%\MythBrowse Open Build`, `$XDG_DATA_HOME/mythbrowse-open`;
+  `MYTHBROWSE_PROFILE_DIR` still overrides), key-store labels (DPAPI entropy, Secret Service
+  `mythbrowse-open`), notification id `JustMyth.MythBrowse.OpenBuild`, MSI product
+  "MythBrowse (Open Build)" with its own UpgradeCode and install folder, MSIX identity.
+- Updates: both builds read `devtmj1123/MythBrowse` releases; the Open Build installs only
+  `MythBrowse-OpenBuild-<version>-<arch>.msi` assets, official builds ignore them.
+- Cargo feature `official` (off by default) on the shell and the light crates selects the
+  official identity; it is for JustMyth's official builds only.
 
 ### Changed compared with the preview builds
 

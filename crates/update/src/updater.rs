@@ -25,7 +25,7 @@ use log::{info, warn};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::release::{self, Arch, Asset, Release};
+use crate::release::{self, Arch, Asset, Channel, Release};
 use crate::version::Version;
 
 /// At most one automatic check per this long.
@@ -55,6 +55,8 @@ pub struct Config {
     /// Starts the installer (default: `msiexec /i <path>` on Windows).
     pub launcher: Launcher,
     pub arch: Arch,
+    /// Which installers this build takes (default: [`Channel::current`]).
+    pub channel: Channel,
 }
 
 impl Config {
@@ -65,10 +67,14 @@ impl Config {
             current: current.to_owned(),
             api_base: "https://api.github.com".into(),
             state_file: None,
-            download_dir: std::env::temp_dir().join("MythBrowse-update"),
+            download_dir: std::env::temp_dir().join(match Channel::current() {
+                Channel::Official => "MythBrowse-update",
+                Channel::Open => "MythBrowse-OpenBuild-update",
+            }),
             allow_url: Arc::new(move |u| release::allowed_download(u, &r)),
             launcher: Arc::new(launch_msiexec),
             arch: Arch::current(),
+            channel: Channel::current(),
         }
     }
 }
@@ -357,7 +363,7 @@ impl Updater {
                 s.phase = Phase::UpToDate;
                 return;
             }
-            match release::pick_installer(&rel.assets, self.cfg.arch) {
+            match release::pick_installer_for(&rel.assets, self.cfg.arch, self.cfg.channel) {
                 Some(a) if (self.cfg.allow_url)(&a.browser_download_url) => {
                     s.phase = Phase::Available;
                     s.installer = Some(a.name.clone());

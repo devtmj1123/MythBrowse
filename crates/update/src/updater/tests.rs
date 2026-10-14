@@ -68,6 +68,8 @@ fn fixture(base: &str, current: &str, tag: &str) -> Fixture {
         Ok(())
     });
     cfg.arch = Arch::X64;
+    // The fixtures publish official-style names (`MythBrowse-x64.msi`).
+    cfg.channel = Channel::Official;
     let changes = Arc::new(AtomicUsize::new(0));
     let c = changes.clone();
     let up = Updater::new(cfg, move || {
@@ -261,6 +263,22 @@ fn default_config_trusts_only_the_public_repo() {
         "https://github.com/devtmj1123/MythBrowse-fork/releases/download/v1/a.msi"
     ));
     assert_eq!(cfg.api_base, "https://api.github.com");
+    assert_eq!(cfg.channel, Channel::current());
+}
+
+#[test]
+fn open_build_ignores_official_installers() {
+    let s = serve_self(|base| {
+        vec![(
+            "/repos/devtmj1123/MythBrowse/releases/latest".to_owned(),
+            200,
+            release_json(base, "v9.0.0", 10, true),
+        )]
+    });
+    let mut f = fixture(&s.base, "0.4.0", "open");
+    f.up.cfg.channel = Channel::Open;
+    f.up.run_check();
+    assert_eq!(f.up.status().phase, Phase::NoInstaller);
 }
 
 /// [`serve`] whose routes can name the server's own base URL.

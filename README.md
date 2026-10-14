@@ -5,7 +5,7 @@ No Chromium, no WebView2: even the browser's own interface is HTML/CSS rendered 
 built-in assistant, **Myth**, talks to **your own** model: a local [Ollama](https://ollama.com)
 server or any OpenAI-compatible API with your key.
 
-> **Status: preview (v0.4.x, Windows).** This repository is the open-source core of
+> **Status: preview (v0.4.2, Windows).** This repository is the open-source core of
 > MythBrowse under the [Mozilla Public License 2.0](LICENSE). It builds a complete, runnable
 > browser with AI chat. The autonomous **Myth agent** (Myth opening, reading and acting on
 > web pages for you) is proprietary and is **not** part of this repository or of builds made

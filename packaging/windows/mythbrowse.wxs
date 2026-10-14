@@ -11,12 +11,13 @@
      make_installer_art.py. A quiet install (msiexec /qn, the CI smoke test) shows no UI, takes the
      defaults (desktop shortcut on) and never launches the app.
      Build: wix build mythbrowse.wxs -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext
-            -d Version=0.0.1 -d SourceDir=<zip contents> -o MythBrowse.msi
+            -d Version=0.4.2 -d SourceDir=<zip contents> -o MythBrowse.msi
      (once: wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2)
-     Identity: ProductName / UpgradeCode / InstallDirName default to the open-source build
+     Identity: ProductName / UpgradeCode / InstallDirName / AppUserModelId default to the open-source build
      ("MythBrowse (Open Build)", its own UpgradeCode, Program Files\JustMyth\MythBrowse Open Build),
      so a source build installs side by side with an official JustMyth build and never replaces it.
-     Official builds pass their own values with -d. Each UpgradeCode is fixed forever: every MSI
+     Official builds pass their own values with -d (AppUserModelId must match
+     mythbrowse_notify::APP_ID of the build: JustMyth.MythBrowse.OpenBuild / JustMyth.MythBrowse). Each UpgradeCode is fixed forever: every MSI
      of one identity replaces the installed one of that identity (MajorUpgrade; same-version
      reinstalls allowed so CI builds of one version upgrade too). -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
@@ -26,6 +27,9 @@
   <?endif?>
   <?ifndef UpgradeCode?>
   <?define UpgradeCode = "C0E66560-9E82-48D9-905C-B8DF0233B420"?>
+  <?endif?>
+  <?ifndef AppUserModelId?>
+  <?define AppUserModelId = "JustMyth.MythBrowse.OpenBuild"?>
   <?endif?>
   <?ifndef InstallDirName?>
   <?define InstallDirName = "MythBrowse Open Build"?>
@@ -123,7 +127,7 @@
                   WorkingDirectory="INSTALLFOLDER">
           <!-- Same id the app sets on itself (mythbrowse-notify APP_ID): toasts of the
                unpackaged build show under MythBrowse. -->
-          <ShortcutProperty Key="System.AppUserModel.ID" Value="JustMyth.MythBrowse" />
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="$(var.AppUserModelId)" />
         </Shortcut>
         <RegistryValue Root="HKLM" Key="Software\JustMyth\$(var.InstallDirName)" Name="StartMenuShortcut"
                        Type="integer" Value="1" KeyPath="yes" />
@@ -139,7 +143,7 @@
                   Target="[INSTALLFOLDER]mythbrowse.exe"
                   Icon="MythBrowseIcon.ico"
                   WorkingDirectory="INSTALLFOLDER">
-          <ShortcutProperty Key="System.AppUserModel.ID" Value="JustMyth.MythBrowse" />
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="$(var.AppUserModelId)" />
         </Shortcut>
         <RegistryValue Root="HKLM" Key="Software\JustMyth\$(var.InstallDirName)" Name="DesktopShortcut"
                        Type="integer" Value="1" KeyPath="yes" />

@@ -16,9 +16,10 @@ pub mod release;
 pub mod updater;
 pub mod version;
 
-pub use release::{Arch, Asset, Release};
+pub use release::{Arch, Asset, Channel, Release};
 pub use updater::{Config, Phase, Status, Updater};
 pub use version::{Version, is_newer};
 
-/// The public repository MythBrowse releases are published in.
+/// The public repository MythBrowse releases are published in (open and official builds; see
+/// [`Channel`] for which installers each takes).
 pub const RELEASE_REPO: &str = "devtmj1123/MythBrowse";

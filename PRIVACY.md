@@ -57,7 +57,7 @@ Official JustMyth builds may be configured at build time with JustMyth's Appwrit
 
 ## What is stored on your device
 
-In your MythBrowse profile (`%LOCALAPPDATA%\MythBrowse` on Windows):
+In your MythBrowse profile (`%LOCALAPPDATA%\MythBrowse Open Build` on Windows, `$XDG_DATA_HOME/mythbrowse-open` elsewhere; official JustMyth builds keep a separate `MythBrowse` profile and never read this one):
 
 - browsing history, bookmarks, downloads list, open tabs (for session restore), site
   permissions and settings;

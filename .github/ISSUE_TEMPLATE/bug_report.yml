@@ -39,5 +39,5 @@ body:
     id: logs
     attributes:
       label: Log excerpt (optional)
-      description: "%LOCALAPPDATA%\\MythBrowse\\logs\\mythbrowse.log. Remove anything private first."
+      description: "%LOCALAPPDATA%\\MythBrowse Open Build\\logs\\mythbrowse.log. Remove anything private first."
       render: text

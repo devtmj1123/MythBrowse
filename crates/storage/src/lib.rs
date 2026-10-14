@@ -167,8 +167,30 @@ pub fn should_record(url: &str, excluded_host: &str) -> bool {
     }
 }
 
-/// Where the profile lives: `$MYTHBROWSE_PROFILE_DIR`, else `%LOCALAPPDATA%\MythBrowse`
-/// on Windows, else `$XDG_DATA_HOME/mythbrowse` or `~/.local/share/mythbrowse`.
+/// True in official JustMyth builds (feature `official`), false in the open-source Open Build.
+pub const OFFICIAL_BUILD: bool = cfg!(feature = "official");
+
+/// Folder name of the profile on Windows (under `%LOCALAPPDATA%`) and of temp-dir fallbacks:
+/// `MythBrowse` (official builds) or `MythBrowse Open Build`, so the two builds never share
+/// profiles, logs, keys or cookies.
+pub const PROFILE_DIR_NAME: &str = if OFFICIAL_BUILD {
+    "MythBrowse"
+} else {
+    "MythBrowse Open Build"
+};
+
+/// Folder name of the profile under `$XDG_DATA_HOME` (Linux and others): `mythbrowse` or
+/// `mythbrowse-open`.
+pub const PROFILE_DIR_NAME_XDG: &str = if OFFICIAL_BUILD {
+    "mythbrowse"
+} else {
+    "mythbrowse-open"
+};
+
+/// Where the profile lives: `$MYTHBROWSE_PROFILE_DIR`, else `%LOCALAPPDATA%\<PROFILE_DIR_NAME>`
+/// on Windows (`MythBrowse Open Build` in the open build, `MythBrowse` in official builds), else
+/// `$XDG_DATA_HOME/<PROFILE_DIR_NAME_XDG>` or `~/.local/share/<PROFILE_DIR_NAME_XDG>`
+/// (`mythbrowse-open` / `mythbrowse`).
 pub fn default_profile_dir() -> Option<PathBuf> {
     let var = |k: &str| {
         std::env::var_os(k)
@@ -179,11 +201,11 @@ pub fn default_profile_dir() -> Option<PathBuf> {
         return Some(dir);
     }
     if cfg!(windows) {
-        return var("LOCALAPPDATA").map(|d| d.join("MythBrowse"));
+        return var("LOCALAPPDATA").map(|d| d.join(PROFILE_DIR_NAME));
     }
     var("XDG_DATA_HOME")
         .or_else(|| var("HOME").map(|h| h.join(".local").join("share")))
-        .map(|d| d.join("mythbrowse"))
+        .map(|d| d.join(PROFILE_DIR_NAME_XDG))
 }
 
 /// The profile database.
@@ -625,6 +647,21 @@ mod tests {
             Some(PathBuf::from("/tmp/mb-profile"))
         );
         unsafe { std::env::remove_var("MYTHBROWSE_PROFILE_DIR") };
+    }
+
+    #[test]
+    fn open_and_official_builds_use_different_profile_folders() {
+        if OFFICIAL_BUILD {
+            assert_eq!(
+                (PROFILE_DIR_NAME, PROFILE_DIR_NAME_XDG),
+                ("MythBrowse", "mythbrowse")
+            );
+        } else {
+            assert_eq!(
+                (PROFILE_DIR_NAME, PROFILE_DIR_NAME_XDG),
+                ("MythBrowse Open Build", "mythbrowse-open")
+            );
+        }
     }
 
     /// One linear schema chain: a profile left at any older version (as that build wrote

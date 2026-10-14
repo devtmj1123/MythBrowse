@@ -11,8 +11,14 @@
 //!
 //! [`toast`] never blocks the caller: the toast is shown from a short-lived thread.
 
-/// AppUserModelID of unpackaged builds (also in `packaging/windows/mythbrowse.wxs`).
-pub const APP_ID: &str = "JustMyth.MythBrowse";
+/// AppUserModelID of unpackaged builds (also in `packaging/windows/mythbrowse.wxs`, variable
+/// `AppUserModelId`): `JustMyth.MythBrowse.OpenBuild` for the open build, `JustMyth.MythBrowse`
+/// for official builds (feature `official`), so their toasts and taskbar groups stay apart.
+pub const APP_ID: &str = if cfg!(feature = "official") {
+    "JustMyth.MythBrowse"
+} else {
+    "JustMyth.MythBrowse.OpenBuild"
+};
 
 /// A notification to show.
 #[derive(Debug, Clone, PartialEq, Eq)]
