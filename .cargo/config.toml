@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+#
+# Mirrors servo/servo's own .cargo/config.toml: Servo links with LLVM's lld-link on
+# Windows (MSVC link.exe is much slower and has hit limits on Servo-sized binaries).
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link.exe"

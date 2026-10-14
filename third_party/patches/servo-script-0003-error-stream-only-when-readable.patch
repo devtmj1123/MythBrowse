@@ -1,0 +1,15 @@
+--- a/dom/response.rs	2026-10-12 08:46:59.980000000 +0000
++++ b/dom/response.rs	2026-10-12 08:46:59.980000000 +0000
+@@ -101,6 +101,12 @@
+ 
+     pub(crate) fn error_stream(&self, error: Error, can_gc: CanGc) {
+         if let Some(body) = self.fetch_body_stream.get() {
++            // ReadableStreamError asserts the stream is "readable". A network or decompression
++            // error can arrive after the page already cancelled the body (or after it closed),
++            // which used to panic the script thread (seznam.cz). Nothing is left to error then.
++            if !body.is_readable() {
++                return;
++            }
+             body.error_native(error, can_gc);
+         }
+     }

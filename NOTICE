@@ -1,0 +1,45 @@
+MythBrowse
+Copyright (c) 2026 JustMyth / Tan Ming Jing
+
+The MythBrowse source code in this repository is licensed under the Mozilla Public License,
+v. 2.0 (see LICENSE), except where a file or directory states otherwise. The names
+"MythBrowse", "Myth", "JustMyth" and "ApeironLabs" and their logos are not licensed under
+the MPL (see TRADEMARK.md).
+
+MythBrowse is built on the Servo web engine and other open-source software.
+
+Servo (https://servo.org, https://github.com/servo/servo)
+  The `servo` crate and its `servo-*` component crates, Mozilla Public License 2.0,
+  copyright The Servo Project Developers. MythBrowse uses the published Servo 0.1.4 crates
+  from crates.io. Four are vendored with small fixes in third_party/ and stay under the
+  MPL-2.0 with their original file headers; each change is listed in third_party/README.md
+  and third_party/patches/:
+    servo-script 0.1.4, servo-net 0.1.4, servo-constellation 0.1.4, servo-layout 0.1.4.
+
+Stylo (https://github.com/servo/stylo), Mozilla Public License 2.0.
+  stylo 0.15.0 is vendored in third_party/stylo with a fix (MPL-2.0, original headers).
+
+surfman (https://github.com/servo/surfman), MIT OR Apache-2.0 OR MPL-2.0.
+  surfman 0.11.0 is vendored in third_party/surfman with a Windows adapter fix; its licence
+  files (LICENSE-MIT, LICENSE-APACHE, LICENSE-MPL) are kept in that directory.
+
+SpiderMonkey (via the `mozjs` / `mozjs_sys` crates), Mozilla Public License 2.0, and the
+  licences of the libraries it bundles.
+
+ANGLE (libEGL.dll / libGLESv2.dll shipped in Windows builds, built by `mozangle`),
+  BSD-3-Clause, copyright The ANGLE Project Authors.
+
+SQLite (bundled through `rusqlite` / `libsqlite3-sys`), public domain.
+
+Public Suffix List (crates/passwords/data/public_suffix_list.dat), Mozilla Foundation,
+  Mozilla Public License 2.0.
+
+All other Rust crate dependencies (about 880; mostly MIT and/or Apache-2.0, also BSD, ISC,
+Zlib, Unicode-3.0, CDLA-Permissive-2.0, BSL-1.0, CC0-1.0 and MPL-2.0) are listed with their
+declared licences in THIRD_PARTY_LICENSES.md, generated from Cargo.lock by
+scripts/third-party-licenses.py. Windows packages ship LICENSE, NOTICE,
+THIRD_PARTY_LICENSES.md and THIRD_PARTY_NOTICES.txt (the licence and notice files of every
+linked crate) next to mythbrowse.exe.
+
+Microsoft Visual C++ runtime DLLs shipped in Windows builds are redistributed under
+Microsoft's Visual Studio redistribution terms.

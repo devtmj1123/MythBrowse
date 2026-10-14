@@ -1,0 +1,26 @@
+diff --git a/script_thread.rs b/script_thread.rs
+index 9008f28..f514641 100644
+--- a/script_thread.rs
++++ b/script_thread.rs
+@@ -4267,6 +4267,21 @@ impl ScriptThread {
+         };
+ 
+         let global_scope = window.as_global_scope();
++        // MythBrowse patch: a document that may not run script (top-level page served with
++        // `Content-Security-Policy: sandbox` without allow-scripts, or one that is no longer
++        // fully active) would trip `assert!(self.can_run_script())` in evaluate_js_on_global
++        // and take the script thread down. Refuse the evaluation instead.
++        if !global_scope.can_run_script() {
++            let _ = self.senders.pipeline_to_constellation_sender.send((
++                webview_id,
++                pipeline_id,
++                ScriptToConstellationMessage::FinishJavaScriptEvaluation(
++                    evaluation_id,
++                    Err(JavaScriptEvaluationError::EvaluationFailure(None)),
++                ),
++            ));
++            return;
++        }
+         let mut realm = enter_auto_realm(cx, global_scope);
+         let cx = &mut realm.current_realm();
+ 

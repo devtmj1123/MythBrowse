@@ -1,0 +1,84 @@
+diff --git a/fragment_tree/box_fragment.rs b/fragment_tree/box_fragment.rs
+index 5c401e3..bec9db0 100644
+--- a/fragment_tree/box_fragment.rs
++++ b/fragment_tree/box_fragment.rs
+@@ -261,9 +261,17 @@ impl BoxFragment {
+ 
+     /// Get the scrollable overflow for this [`BoxFragment`] relative to its
+     /// containing block.
++    ///
++    /// MythBrowse patch (servo-layout-0001): a fragment the overflow pass never reached (a
++    /// script query or display-list build that reads a fragment created after the last overflow
++    /// calculation) used to panic here and take down the script thread with the page
++    /// (`Should only call scrollable_overflow() after calculating overflow`). It now falls back
++    /// to the fragment's own padding box (the minimum scrollable overflow) and logs once.
+     pub fn scrollable_overflow(&self) -> PhysicalRect<Au> {
+-        self.scrollable_overflow
+-            .expect("Should only call `scrollable_overflow()` after calculating overflow")
++        self.scrollable_overflow.unwrap_or_else(|| {
++            crate::fragment_tree::warn_overflow_not_calculated("BoxFragment::scrollable_overflow");
++            self.padding_rect()
++        })
+     }
+ 
+     /// This is an implementation of:
+diff --git a/fragment_tree/fragment_tree.rs b/fragment_tree/fragment_tree.rs
+index 0ec542d..340ac3a 100644
+--- a/fragment_tree/fragment_tree.rs
++++ b/fragment_tree/fragment_tree.rs
+@@ -107,9 +107,11 @@ impl FragmentTree {
+     }
+ 
+     pub(crate) fn scrollable_overflow(&self) -> PhysicalRect<Au> {
+-        self.scrollable_overflow
+-            .get()
+-            .expect("Should only call `scrollable_overflow()` after calculating overflow")
++        // MythBrowse patch (servo-layout-0001): the initial containing block instead of a panic.
++        self.scrollable_overflow.get().unwrap_or_else(|| {
++            crate::fragment_tree::warn_overflow_not_calculated("FragmentTree::scrollable_overflow");
++            self.initial_containing_block
++        })
+     }
+ 
+     /// Calculate the scrollable overflow / scrolling area for this [`FragmentTree`] according
+diff --git a/fragment_tree/mod.rs b/fragment_tree/mod.rs
+index bdb503c..e813caa 100644
+--- a/fragment_tree/mod.rs
++++ b/fragment_tree/mod.rs
+@@ -18,3 +18,14 @@ pub(crate) use fragment::*;
+ pub(crate) use fragment_tree::*;
+ pub(crate) use hoisted_shared_fragment::*;
+ pub(crate) use positioning_fragment::*;
++
++/// MythBrowse patch (servo-layout-0001): logged (once per process) when a fragment's
++/// scrollable overflow is read before the overflow pass reached it; the callers fall back to a
++/// safe rectangle instead of panicking.
++pub(crate) fn warn_overflow_not_calculated(what: &str) {
++    use std::sync::atomic::{AtomicBool, Ordering};
++    static WARNED: AtomicBool = AtomicBool::new(false);
++    if !WARNED.swap(true, Ordering::Relaxed) {
++        log::warn!("layout: {what} read before overflow was calculated; using a fallback rect");
++    }
++}
+diff --git a/fragment_tree/positioning_fragment.rs b/fragment_tree/positioning_fragment.rs
+index 5884c4e..ac7b1bc 100644
+--- a/fragment_tree/positioning_fragment.rs
++++ b/fragment_tree/positioning_fragment.rs
+@@ -81,9 +81,14 @@ impl PositioningFragment {
+     }
+ 
+     pub(crate) fn scrollable_overflow_for_parent(&self) -> PhysicalRect<Au> {
+-        self.scrollable_overflow.expect(
+-            "Should only call `scrollable_overflow_for_parent()` after calculating overflow",
+-        )
++        // MythBrowse patch (servo-layout-0001): no panic for a fragment the overflow pass never
++        // reached; its own rect is the fallback.
++        self.scrollable_overflow.unwrap_or_else(|| {
++            crate::fragment_tree::warn_overflow_not_calculated(
++                "PositioningFragment::scrollable_overflow_for_parent",
++            );
++            self.base.rect
++        })
+     }
+ 
+     pub fn print(&self, tree: &mut PrintTree) {

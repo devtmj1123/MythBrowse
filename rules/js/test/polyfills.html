@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- In-engine test page for the rules/js polyfills: open it over http with the compat user
+     scripts installed (see rules/js/test/README.md), then run polyfills_check.js. -->
+<meta charset="utf-8">
+<title>polyfills</title>
+<style>#hid{display:none} #vh{visibility:hidden} #op{opacity:0}</style>
+<div id="vis">visible</div>
+<div id="hid"><span id="inhid">x</span></div>
+<div id="vh">vh</div>
+<div id="op">op</div>
+<div style="display:contents" id="dc">dc</div>
+<button id="btn" popovertarget="pop">open</button>
+<div id="pop" popover>popover body</div>
+<div id="man" popover="manual">manual</div>
+<div id="spacer" style="height:3000px">tall</div>
+<div id="below" style="height:50px">below the fold</div>
+<script>
+// IntersectionObserver: record what the observer reports (read by polyfills_check.js)
+window.__io = { first: null, afterScroll: null, calls: 0 };
+var io = new IntersectionObserver(function (entries) {
+  window.__io.calls++;
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (window.__io.first === null) window.__io.first = {};
+    if (!(e.target.id in window.__io.first)) window.__io.first[e.target.id] = e.isIntersecting;
+    if (window.__io.scrolled && e.target.id === "below") window.__io.afterScroll = e.isIntersecting;
+  }
+});
+io.observe(document.getElementById("vis"));
+io.observe(document.getElementById("below"));
+setTimeout(function () { window.__io.scrolled = true; document.getElementById("below").scrollIntoView(); }, 400);
+</script>

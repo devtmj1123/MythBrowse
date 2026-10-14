@@ -1,0 +1,151 @@
+/* SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing */
+/* Myth panel over web pages + selection pill (ui/assist.js, docs/AI-OVERLAY.md).
+   The shell gives both rectangles (state.frame.assist / .selpill) and composes them over the
+   page. Every surface over page content is >= 92 % opaque (--myth-bg is 0.93 / 0.94): the
+   user's rule, and Servo 0.1.4 has no backdrop-filter anyway. Animations: transform and
+   opacity only; none with Motion off. Servo: no text-overflow (JS truncates), buttons get
+   their height from padding + line-height. */
+
+.assist {
+  position: fixed;
+  z-index: 5;
+  left: 0; top: 0; width: 0; height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 22px;
+  background: var(--myth-bg);
+  box-shadow: inset 0 0 0 1px var(--myth-line);
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 19px;
+  overflow: hidden;
+}
+.assist[hidden] { display: none; }
+.assist.docked { box-shadow: inset 0 0 0 1px var(--myth-line), var(--lg-float); }
+.assist.as-in { animation: as-in 180ms cubic-bezier(.2, .8, .2, 1) both; }
+.assist.floating.as-in { animation-name: as-pop; }
+@keyframes as-in { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes as-pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+html[data-motion="off"] .assist.as-in, html[data-motion="reduced"] .assist.as-in { animation: none; }
+
+/* Header: mark, name, model; mode / full chat / new / close. Floating: drag handle. */
+.as-head { flex: none; display: flex; align-items: center; gap: 8px; height: 50px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--myth-line); }
+.assist.floating .as-head { cursor: grab; }
+.assist.floating.dragging .as-head { cursor: grabbing; }
+.as-head .mark { font-size: 9px; }
+.as-head .as-name { font-size: 15px; font-weight: 700; line-height: 20px; }
+.as-head .as-model { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--myth-soft); }
+.as-ibtn { flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 16px; background: rgba(0, 0, 0, 0); display: flex; align-items: center; justify-content: center; color: inherit; }
+.as-ibtn:hover { background: var(--myth-btn); }
+.as-ibtn:active { transform: scale(0.94); }
+.as-ibtn.on { background: var(--myth-btn-hi); }
+
+/* Context chips: what the next message carries. */
+.as-ctx { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 2px; }
+.as-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 6px 4px 10px; border-radius: 14px; background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line); font-size: 12.5px; line-height: 18px; white-space: nowrap; }
+.as-chip .as-chip-t { overflow: hidden; }
+.as-chip button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 10px; background: rgba(0, 0, 0, 0); display: flex; align-items: center; justify-content: center; color: inherit; }
+.as-chip button:hover { background: var(--myth-btn-hi); }
+.as-chip.off { background: rgba(0, 0, 0, 0); box-shadow: inset 0 0 0 1px var(--myth-line); color: var(--myth-soft); padding-right: 10px; cursor: pointer; }
+.as-chip.lock { color: var(--myth-soft); }
+.as-chip.lock .as-share { width: auto; height: auto; padding: 1px 8px; border-radius: 9px; background: var(--myth-navy); color: #ffffff; font-weight: 600; font-size: 12px; line-height: 18px; }
+.as-chip.toggle { padding-right: 10px; cursor: pointer; }
+.as-chip.toggle.on { background: var(--myth-navy); color: #ffffff; box-shadow: none; }
+
+/* Conversation (MythChat.Chat renders into .as-body). */
+.as-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 12px 6px; }
+.as-body .inner { display: flex; flex-direction: column; gap: 10px; }
+.as-body .day-sep { display: none; }
+.as-body .msg-row { display: flex; }
+.as-body .msg-row.you { justify-content: flex-end; }
+.as-body .msg { max-width: 92%; padding: 9px 12px; border-radius: 16px; font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.as-body .msg.you { background: var(--myth-navy); color: #ffffff; border-bottom-right-radius: 6px; }
+.as-body .msg.you p { margin: 0; white-space: pre-wrap; }
+.as-body .msg.myth { background: var(--myth-btn); border-bottom-left-radius: 6px; }
+.as-body .msg.error { box-shadow: inset 3px 0 0 var(--bad, #c0392b); }
+.as-body .who { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; font-size: 11.5px; font-weight: 700; color: var(--myth-soft); }
+.as-body .who .mark { font-size: 6px; }
+.as-body .body p { margin: 0 0 6px; }
+.as-body .body p:last-child { margin-bottom: 0; }
+.as-body .body p.h { font-weight: 700; }
+.as-body .body ul, .as-body .body ol { margin: 2px 0 6px; padding-left: 18px; }
+.as-body .body pre { margin: 4px 0; padding: 8px; border-radius: 8px; background: var(--myth-btn); font-size: 12px; white-space: pre-wrap; }
+.as-body .body code { font-size: 12px; padding: 0 3px; border-radius: 4px; background: var(--myth-btn); }
+.as-body a.link { color: var(--myth-navy); text-decoration: underline; }
+.as-body .notice { color: var(--myth-soft); font-size: 12.5px; margin: 4px 0 0; }
+.as-body .typing { display: flex; gap: 4px; padding: 4px 0; }
+.as-body .typing[hidden] { display: none; }
+.as-body .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--myth-soft); animation: as-bob 1.1s ease-in-out infinite; }
+.as-body .typing i:nth-child(2) { animation-delay: 0.15s; }
+.as-body .typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes as-bob { 0%, 100% { transform: translateY(0); opacity: 0.5; } 50% { transform: translateY(-3px); opacity: 1; } }
+html[data-motion="off"] .as-body .typing i { animation: none; }
+.as-body .steps { display: flex; flex-direction: column; gap: 2px; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--myth-line); }
+.as-body .steps[hidden] { display: none; }
+.as-body .step { display: flex; align-items: center; gap: 6px; min-height: 22px; font-size: 12.5px; color: var(--myth-soft); }
+.as-body .step-ico { display: flex; flex: none; width: 14px; justify-content: center; }
+.as-body .approval { margin-top: 8px; padding: 10px 12px; border-radius: 14px; background: var(--myth-bg); box-shadow: inset 0 0 0 1px var(--myth-line), 0 0 0 2px rgba(214, 150, 40, 0.55); }
+.as-body .approval p { margin: 4px 0 0; }
+.as-body .w-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12.5px; }
+.as-body .approval-action { font-weight: 600; }
+.as-body .approval-why { color: var(--myth-soft); font-size: 12.5px; }
+.as-body .approval-url { color: var(--myth-soft); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as-body .approval-btns { display: flex; gap: 8px; margin-top: 10px; }
+.as-body .approval-btns button { padding: 6px 14px; border: 0; border-radius: 15px; font-weight: 600; font-size: 13px; line-height: 18px; }
+.as-body .approval-btns .primary { background: var(--myth-navy); color: #ffffff; }
+.as-body .approval-btns .ghost { background: var(--myth-btn); color: inherit; box-shadow: inset 0 0 0 1px var(--myth-line); }
+.as-body .approval-done { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--myth-soft); font-size: 12.5px; }
+.as-ref { display: inline-block; padding: 0 6px; margin: 0 1px; border: 0; border-radius: 8px; background: var(--myth-navy); color: #ffffff; font-size: 11.5px; font-weight: 700; line-height: 17px; cursor: pointer; }
+.as-ref:hover { transform: translateY(-1px); }
+.as-reading { display: flex; align-items: center; gap: 8px; color: var(--myth-soft); font-size: 12.5px; padding: 6px 2px; }
+.as-err { margin: 6px 0 0; padding: 8px 10px; border-radius: 12px; background: rgba(192, 57, 43, 0.10); color: var(--text); font-size: 12.5px; }
+
+/* Empty state: what Myth can do here. */
+.as-empty { padding: 10px 4px; }
+.as-empty h4 { margin: 4px 0 4px; font-size: 15px; line-height: 21px; }
+.as-empty p { margin: 0 0 12px; color: var(--myth-soft); font-size: 12.5px; }
+.as-cmds { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.as-cmd { display: flex; align-items: center; gap: 8px; padding: 10px; border: 0; border-radius: 14px; background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line); color: inherit; font-size: 13px; line-height: 18px; font-weight: 600; text-align: left; }
+.as-cmd:hover { background: var(--myth-btn-hi); }
+.as-cmd:active { transform: scale(0.98); }
+
+/* Quick commands row above the composer (once the chat has started). */
+.as-quick { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px 0; overflow: hidden; }
+.as-quick[hidden] { display: none; }
+.as-q { flex: none; padding: 3px 9px; border: 0; border-radius: 12px; background: var(--myth-btn); color: inherit; font-size: 12px; line-height: 18px; font-weight: 600; white-space: nowrap; }
+.as-q:hover { background: var(--myth-btn-hi); }
+.as-q.on { background: var(--myth-navy); color: #ffffff; }
+
+/* Composer. */
+.as-composer { flex: none; display: flex; align-items: flex-end; gap: 6px; margin: 8px 10px 10px; padding: 6px 6px 6px 12px; border-radius: 20px; background: var(--myth-bg); box-shadow: inset 0 0 0 1px var(--myth-line); }
+.as-composer textarea { flex: 1 1 auto; min-width: 0; height: 22px; max-height: 120px; margin: 5px 0; padding: 0; border: 0; outline: none; resize: none; background: rgba(0, 0, 0, 0); color: var(--text); font: inherit; font-size: 13.5px; line-height: 22px; }
+.as-send { flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 17px; background: var(--myth-navy); display: flex; align-items: center; justify-content: center; }
+.as-send:active { transform: scale(0.94); }
+
+/* Docked resize handle (left edge). */
+.as-grip { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: ew-resize; }
+.assist.floating .as-grip { display: none; }
+
+/* Selection pill. */
+.selpill {
+  position: fixed; z-index: 6; left: 0; top: 0; width: 0; height: 0;
+  display: flex; align-items: center; gap: 2px; padding: 0 4px;
+  border-radius: 19px; background: var(--myth-bg); box-shadow: inset 0 0 0 1px var(--myth-line);
+  color: var(--text); font-size: 12.5px; line-height: 18px; white-space: nowrap; overflow: hidden;
+}
+.selpill[hidden] { display: none; }
+.selpill.sp-in { animation: as-pop 140ms cubic-bezier(.2, .8, .2, 1) both; }
+html[data-motion="off"] .selpill.sp-in, html[data-motion="reduced"] .selpill.sp-in { animation: none; }
+.selpill button { display: flex; align-items: center; gap: 5px; padding: 5px 9px; border: 0; border-radius: 15px; background: rgba(0, 0, 0, 0); color: inherit; font-size: 12.5px; line-height: 18px; font-weight: 600; }
+.selpill button:hover { background: var(--myth-btn); }
+.selpill button.sp-ask { background: var(--myth-navy); color: #ffffff; }
+.selpill .mark { font-size: 6px; }
+.selpill .sp-sep { flex: none; width: 1px; height: 16px; background: var(--myth-line); }
+
+/* Toolbar Myth button. */
+#assist-btn .mark { font-size: 8px; }
+#assist-btn.on { background: var(--myth-btn-hi); }
+.as-ctx > .as-ibtn { align-self: center; box-shadow: inset 0 0 0 1px var(--myth-line); color: var(--myth-soft); }
+.as-cmd:disabled, .as-q:disabled { opacity: 0.45; cursor: default; }
+.as-cmd:disabled:hover, .as-q:disabled:hover { background: var(--myth-btn); }
+.as-cmd:disabled:active { transform: none; }

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- Browser chrome: custom title bar (Myth dots, tabs, drag area, window controls) + toolbar
+     (navigation, address bar, page actions), on the MythDesk sky and glass. Rendered by Servo
+     in its own window-sized webview of a frameless window (the sky around the floating page
+     card is this page too); talks to the Rust shell via
+     fetch('/api/...') and receives state through window.mb.render().
+     See crates/engine/src/chrome.rs. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mb-token" content="{{MB_TOKEN}}">
+  <meta name="mb-theme-hour" content="{{MB_THEME_HOUR}}">
+  <meta name="mb-glass" content="{{MB_GLASS}}">
+  <meta name="mb-transparency" content="{{MB_TRANSPARENCY}}">
+  <meta name="mb-reduce-transparency" content="{{MB_REDUCE_TRANSPARENCY}}">
+  <title>MythBrowse chrome</title>
+  <link rel="stylesheet" href="design/tokens.css">
+  <link rel="stylesheet" href="chrome.css">
+  <link rel="stylesheet" href="assist.css">
+  <script src="design/theme.js"></script>
+  <script src="design/icons.js"></script>
+  <script src="design/motion.js"></script>
+</head>
+<body>
+  <canvas id="sky" data-band aria-hidden="true"></canvas>
+  <div id="tint" aria-hidden="true"></div>
+  <div id="card" aria-hidden="true"></div>
+  <header id="titlebar" class="titlebar">
+    <div class="brand" title="MythBrowse"><span class="tb-dots"><i></i><i></i><i></i></span></div>
+    <!-- The tab strip is a clear rail floating in the cloud deck (hairline, faint tint); the
+         active tab is the one glass pill on it. -->
+    <div class="rail">
+      <div id="tabs" class="tabs" role="tablist"></div>
+      <button id="new-tab" class="nav new-tab" title="New tab (Ctrl+T)" aria-label="New tab">
+        <span data-icon="plus" data-size="17" data-role="soft"></span>
+      </button>
+    </div>
+    <div class="drag-space"></div>
+    <div class="window-controls">
+      <button id="win-min" class="tb-btn" title="Minimize" aria-label="Minimize">
+        <span data-icon="min" data-size="16" data-role="soft"></span>
+      </button>
+      <button id="win-max" class="tb-btn" title="Maximize" aria-label="Maximize">
+        <span id="win-max-icon" data-icon="max" data-size="14" data-role="soft"></span>
+      </button>
+      <button id="win-close" class="tb-btn close" title="Close" aria-label="Close">
+        <span class="ico-normal" data-icon="close" data-size="16" data-role="soft"></span>
+        <span class="ico-hover" data-icon="close" data-size="16" data-color="#ffffff"></span>
+      </button>
+    </div>
+  </header>
+  <form id="toolbar" class="toolbar" autocomplete="off">
+    <div class="side side-left">
+      <button type="button" id="back" class="nav" title="Back (Alt+Left)" aria-label="Back">
+        <span data-icon="back" data-size="19" data-role="soft"></span>
+      </button>
+      <button type="button" id="forward" class="nav" title="Forward (Alt+Right)" aria-label="Forward">
+        <span data-icon="forward" data-size="19" data-role="soft"></span>
+      </button>
+      <button type="button" id="reload" class="nav" title="Reload (F5)" aria-label="Reload">
+        <span data-icon="reload" data-size="18" data-role="soft"></span>
+      </button>
+    </div>
+    <div class="center">
+      <div id="omnibox-wrap" class="omnibox-wrap" data-glass="c">
+        <span id="lead" class="lead" title="Enter an address, ask Myth, or start with ? to search the web">
+          <span id="lead-icon" class="lead-icon"></span><span id="lead-label" class="lead-label"></span>
+        </span>
+        <span class="omni-field">
+          <input id="omnibox" class="omnibox" type="text" spellcheck="false"
+                 placeholder="Message Myth or type an address"
+                 aria-label="Address bar">
+          <!-- The address at rest: host in bold, the rest dimmed (the input keeps the text). -->
+          <span id="url-view" class="url-view" aria-hidden="true" hidden></span>
+        </span>
+        <span id="hint" class="hint" hidden><kbd>Enter</kbd><span id="hint-text">Ask Myth</span></span>
+        <!-- Page actions sit inside the address bar, as in the approved design. Site compat:
+             a quiet line icon, a small status dot when the detector found problems or a fix
+             is active; opens the compat panel. -->
+        <!-- Page zoom when it is not 100 % (v0.4.2): click to reset (Ctrl+0). -->
+        <button type="button" id="zoom" class="zoom-chip" title="Reset zoom (Ctrl+0)" aria-label="Reset zoom" hidden></button>
+        <!-- Ask about this page: the next prompt goes with a screenshot of the tab (models
+             that can see images; passwords blacked out, never saved). Shown on web pages. -->
+        <button type="button" id="ask-shot" class="nav" title="Ask Myth about this page (sends a screenshot)" aria-label="Ask about this page" aria-pressed="false" hidden>
+          <span data-icon="eye" data-size="17" data-role="soft"></span>
+        </button>
+        <button type="button" id="bookmark" class="nav" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark">
+          <span id="bookmark-icon"></span>
+        </button>
+        <!-- Passwords: a key while the page has a login form or saved logins; opens the
+             passwords panel (fill a saved login, or the "Save password?" prompt). -->
+        <button type="button" id="pw" class="nav pw-btn" title="Passwords" aria-label="Passwords" aria-haspopup="dialog" hidden>
+          <span data-icon="key" data-size="17" data-role="soft"></span><i class="compat-dot" aria-hidden="true"></i>
+        </button>
+        <button type="button" id="compat" class="nav compat-btn" title="Site compatibility" aria-label="Site compatibility" aria-haspopup="dialog" hidden>
+          <span data-icon="compat" data-size="17" data-role="soft"></span><i class="compat-dot" aria-hidden="true"></i>
+        </button>
+      </div>
+      <!-- Find in page (Ctrl+F, v0.4.2): beside the address bar, never over the page. The
+           page script does the searching and highlighting (crates/engine/src/browse.rs). -->
+      <div id="findbar" class="findbar" data-glass="c" role="search" aria-label="Find in page" hidden>
+        <span class="find-ico" data-icon="search" data-size="14" data-role="soft"></span>
+        <input id="find-input" class="find-input" type="text" spellcheck="false" autocomplete="off"
+               placeholder="Find in page" aria-label="Find in page">
+        <span id="find-count" class="find-count" aria-live="polite"></span>
+        <button type="button" id="find-prev" class="nav find-btn up" title="Previous match (Shift+Enter)" aria-label="Previous match">
+          <span data-icon="chevron" data-size="15" data-role="soft"></span>
+        </button>
+        <button type="button" id="find-next" class="nav find-btn" title="Next match (Enter)" aria-label="Next match">
+          <span data-icon="chevron" data-size="15" data-role="soft"></span>
+        </button>
+        <button type="button" id="find-close" class="nav find-btn" title="Close (Esc)" aria-label="Close find">
+          <span data-icon="close" data-size="14" data-role="soft"></span>
+        </button>
+      </div>
+      <!-- A short note (a link that cannot open here, "Opening your email app…"). -->
+      <div id="toast" class="toast" role="status" hidden></div>
+    </div>
+    <!-- Right side as in the approved design: Tasks (badge = Myth tasks running) and the
+         settings gear, which opens Settings (model, motion, sync, bookmarks and History,
+         Ctrl+H). -->
+    <div class="side side-right">
+      <!-- Downloads (shown once there is one this session): a progress bar under the icon
+           while files arrive, a dot when one waits for Keep / Discard. Ctrl+Shift+Y. -->
+      <button type="button" id="downloads" class="nav dl-btn" title="Downloads (Ctrl+Shift+Y)" aria-label="Downloads" hidden>
+        <span data-icon="download" data-size="19" data-role="soft"></span><i id="dl-bar" class="dl-bar" hidden><b></b></i><span id="dl-dot" class="dl-dot" hidden></span>
+      </button>
+      <!-- Myth panel over the page (docs/AI-OVERLAY.md): web pages only. Ctrl+J. -->
+      <button type="button" id="assist-btn" class="nav" title="Myth on this page (Ctrl+J)" aria-label="Myth on this page" aria-pressed="false" hidden>
+        <span class="mark"><i></i><i></i><i></i></span>
+      </button>
+      <button type="button" id="tasks" class="nav" title="Tasks (Ctrl+Shift+J)" aria-label="Tasks">
+        <span data-icon="tasks" data-size="19" data-role="soft"></span><span id="tasks-badge" class="badge" hidden></span>
+      </button>
+      <button type="button" id="library" class="nav" title="Settings and history (Ctrl+H)" aria-label="Settings and history">
+        <span data-icon="settings" data-size="19" data-role="soft"></span>
+      </button>
+    </div>
+    <div id="progress" class="progress" hidden><i></i></div>
+  </form>
+  <!-- Myth working on the page in the card: a glass pill floating over the bottom centre of
+       the card (status dot, "Myth", the current step, Stop), which expands into a card when
+       Myth needs the user's OK (Allow / Don't allow). The shell gives its exact rectangle
+       (state.frame.overlay) and composes it over the page; see crates/engine/src/frame.rs.
+       Filled by chrome.js from state.myth. -->
+  <div id="myth" class="myth" data-glass="c" hidden></div>
+  <!-- Site compat panel: floats over the top right of the page card (state.frame.overlay with
+       kind "compat"; the shell composes it over the page like the Myth pill). Detector
+       findings, rules applied here, "Ask Myth to fix" with preview / keep / undo, reader view.
+       Filled by chrome.js from state.compat. -->
+  <div id="compat-panel" class="compat-panel" data-glass="f" role="dialog" aria-label="Site compatibility" hidden></div>
+  <!-- Passwords panel: same place and size as the compat panel (state.frame.overlay with kind
+       "passwords"). Either "Save password?" after a login (Save / Never for this site / Not
+       now) or the saved accounts for this site; clicking one fills it into the page. Only
+       usernames are ever sent here, never a password. Filled by chrome.js from
+       state.passwords. -->
+  <div id="pw-panel" class="compat-panel pw-panel" data-glass="f" role="dialog" aria-label="Passwords" hidden></div>
+  <!-- Tasks panel (toolbar Tasks button, Ctrl+J): floats over the top right of the page area
+       (state.frame.panel; the shell composes it over the page and routes its pointer events
+       here), like the approved design's #tasks: each task's live thumbnail, status, progress,
+       step list and Peek / Take over / Stop. "All tasks" opens the full Tasks page. Filled by
+       chrome.js from /api/tasks while open. -->
+  <!-- Tab right-click menu (pin / unpin, close). -->
+  <div id="tasks-panel" class="tasks-panel" data-glass="f" role="dialog" aria-label="Tasks" hidden></div>
+  <!-- Myth panel (Ctrl+J / the Myth button): docked right of the card or floating over it
+       (state.frame.assist; the shell composes it over the page and routes its pointer events
+       here). Page context chips, quick commands, the conversation (ui/chat.js renderer) with
+       inline approval cards, composer. Filled by ui/assist.js from state.assist. -->
+  <div id="assist" class="assist" role="complementary" aria-label="Myth" hidden></div>
+  <!-- Selection pill: Ask Myth / Explain / Translate / Summarize / Rewrite over selected page
+       text (state.frame.selpill). -->
+  <div id="selpill" class="selpill" role="toolbar" aria-label="Myth: selected text" hidden></div>
+  <script src="design/sky.js"></script>
+  <script src="chrome.js"></script>
+  <!-- Suggestions dropdown, context menus, page dialog / permission sheet, pop-up indicator,
+       Snap Layouts button rectangle (see ui/popups.js and crates/shell/src/ui_host.rs). -->
+  <script src="popups.js"></script>
+  <script src="chat.js"></script>
+  <script src="assist.js"></script>
+</body>
+</html>

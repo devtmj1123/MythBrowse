@@ -1,0 +1,7 @@
+{
+  "_comment": "MSIX package identity: the ONE place to change it. Placeholders until the app is registered in Partner Center; then copy Name, Publisher and PublisherDisplayName from Partner Center > Product identity. The version comes from Cargo.toml (a.b.c.0).",
+  "Name": "JustMyth.MythBrowse",
+  "Publisher": "CN=JustMyth-Dev",
+  "DisplayName": "MythBrowse",
+  "PublisherDisplayName": "JustMyth"
+}

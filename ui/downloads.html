@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- Downloads (toolbar Downloads button, Ctrl+Shift+Y): MythDesk's wide view on its sky, like
+     the library page. Data via /api/downloads, actions via /api/download_action; the shell
+     pushes changes with window.mbDownloads(list) while the page is open (no polling).
+     Styles use the design tokens only. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mb-token" content="{{MB_TOKEN}}">
+  <meta name="mb-glass" content="{{MB_GLASS}}">
+  <meta name="mb-transparency" content="{{MB_TRANSPARENCY}}">
+  <meta name="mb-reduce-transparency" content="{{MB_REDUCE_TRANSPARENCY}}">
+  <meta name="mb-theme-hour" content="{{MB_THEME_HOUR}}">
+  <title>Downloads</title>
+  <link rel="stylesheet" href="design/tokens.css">
+  <link rel="stylesheet" href="home.css">
+  <script src="design/theme.js"></script>
+  <script src="design/icons.js"></script>
+  <script src="design/motion.js"></script>
+  <style>
+    .dl-list { list-style: none; margin: 0; padding: 0; }
+    .dl { display: grid; grid-template-columns: 34px 1fr auto; gap: 12px; align-items: center;
+          padding: 10px 12px; border-radius: 12px; }
+    .dl:hover { background: var(--chip); }
+    .dl .ico { width: 34px; height: 34px; border-radius: 10px; background: var(--chip);
+               display: grid; place-items: center; color: var(--soft); }
+    .dl .name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis;
+                white-space: nowrap; display: block; }
+    .dl .name[data-open] { cursor: pointer; }
+    .dl .name[data-open]:hover { text-decoration: underline; }
+    .dl .sub { font-size: 12px; color: var(--soft); overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; display: block; margin-top: 2px; }
+    .dl .bar { height: 4px; border-radius: 2px; background: var(--chip-hi); margin-top: 6px;
+               overflow: hidden; }
+    .dl .bar > i { display: block; height: 100%; width: 0; background: var(--ink);
+                   border-radius: 2px; transition: width .25s ease; }
+    .dl .bar.indet > i { width: 30%; animation: dl-slide 1.2s ease-in-out infinite; }
+    @keyframes dl-slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+    .dl .acts { display: flex; gap: 6px; align-items: center; }
+    .dl .warn { grid-column: 2 / 4; display: flex; gap: 10px; align-items: center;
+                padding: 8px 10px; border-radius: 10px; background: var(--chip);
+                color: var(--text); font-size: 13px; }
+    .dl .warn b { color: var(--bad); }
+    .dl.failed .sub { color: var(--bad); }
+    .dl.cancelled .name { color: var(--soft); text-decoration: line-through; }
+    .dl .agent { font-size: 11px; color: var(--soft); margin-left: 6px; }
+    #empty { padding: 28px 12px; text-align: center; color: var(--soft); }
+    @media (prefers-reduced-motion: reduce) { .dl .bar.indet > i { animation: none; width: 100%; opacity: .4; } }
+  </style>
+</head>
+<body class="sky-page library-page downloads-page">
+  <canvas id="sky" data-above="88" data-bleed="12" aria-hidden="true"></canvas>
+  <main class="library">
+    <header><h1>Downloads</h1><span id="where" class="soft"></span></header>
+    <section class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="download" data-size="15" data-role="soft"></span>Files <span id="count" class="count"></span></div>
+        <span class="w-title"></span>
+        <button id="folder" class="ghost" type="button"><span data-icon="folder" data-size="14" data-role="soft"></span>Open folder</button>
+        <button id="clear" class="ghost" type="button"><span data-icon="trash" data-size="14" data-role="soft"></span>Clear finished</button>
+      </div>
+      <ul id="list" class="dl-list" aria-live="polite"></ul>
+      <p id="empty" hidden>Files you download appear here.</p>
+    </section>
+  </main>
+  <script src="design/sky.js"></script>
+  <script src="downloads.js"></script>
+</body>
+</html>

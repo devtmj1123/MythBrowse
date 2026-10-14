@@ -1,0 +1,118 @@
+diff --git a/src/platform/windows/angle/device.rs b/src/platform/windows/angle/device.rs
+index d104f86..49c3b67 100644
+--- a/src/platform/windows/angle/device.rs
++++ b/src/platform/windows/angle/device.rs
+@@ -23,6 +23,11 @@ use winapi::um::d3dcommon::{
+     D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_UNKNOWN, D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL_9_3,
+ };
+ use winapi::Interface;
++
++/// PCI vendor id of Microsoft (the Basic Render Driver, i.e. WARP).
++const MICROSOFT_PCI_ID: UINT = 0x1414;
++/// Device id of the Microsoft Basic Render Driver.
++const BASIC_RENDER_DEVICE_ID: UINT = 0x8c;
+ use wio::com::ComPtr;
+ 
+ thread_local! {
+@@ -91,7 +96,16 @@ impl Adapter {
+                 Ok((*dxgi_factory_slot).clone().unwrap())
+             })?;
+ 
+-            // Find the first adapter that matches the vendor preference.
++            // MythBrowse patch (third_party/patches/surfman-0001): pick a *hardware* adapter.
++            // Since Windows 8 DXGI always enumerates the "Microsoft Basic Render Driver"
++            // (VendorId 0x1414, DXGI_ADAPTER_FLAG_SOFTWARE), i.e. WARP, a CPU rasterizer.
++            // Upstream chose the first adapter matching the vendor preference, so
++            // `Avoid(Intel)` on an Intel-only PC (the most common laptop) selected that
++            // software adapter and everything (WebRender, the shell's compositor) ran on the
++            // CPU. Order now: hardware + preference, any hardware, then the first adapter
++            // (a machine with no GPU driver at all still works, on WARP).
++            let mut candidates: Vec<(ComPtr<dxgi::IDXGIAdapter1>, dxgi::DXGI_ADAPTER_DESC1)> =
++                Vec::new();
+             let mut adapter_index = 0;
+             loop {
+                 let mut dxgi_adapter_1 = ptr::null_mut();
+@@ -102,41 +116,54 @@ impl Adapter {
+                 assert!(!dxgi_adapter_1.is_null());
+                 let dxgi_adapter_1 = ComPtr::from_raw(dxgi_adapter_1);
+ 
+-                let mut adapter_desc = mem::zeroed();
++                let mut adapter_desc: dxgi::DXGI_ADAPTER_DESC1 = mem::zeroed();
+                 let result = (*dxgi_adapter_1).GetDesc1(&mut adapter_desc);
+                 assert_eq!(result, S_OK);
+-
+-                let choose_this = match vendor_preference {
+-                    VendorPreference::Prefer(vendor_id) => vendor_id == adapter_desc.VendorId,
+-                    VendorPreference::Avoid(vendor_id) => vendor_id != adapter_desc.VendorId,
+-                    VendorPreference::None => true,
+-                };
+-                if choose_this {
+-                    let mut dxgi_adapter: *mut IDXGIAdapter = ptr::null_mut();
+-                    let result = (*dxgi_adapter_1).QueryInterface(
+-                        &IDXGIAdapter::uuidof(),
+-                        &mut dxgi_adapter as *mut *mut IDXGIAdapter as *mut *mut c_void,
+-                    );
+-                    assert_eq!(result, S_OK);
+-                    let dxgi_adapter = ComPtr::from_raw(dxgi_adapter);
+-
+-                    return Ok(Adapter {
+-                        dxgi_adapter,
+-                        d3d_driver_type,
+-                    });
+-                }
+-
++                candidates.push((dxgi_adapter_1, adapter_desc));
+                 adapter_index += 1;
+             }
+-
+-            // Fallback: Go with the first adapter.
+-            let mut dxgi_adapter_1 = ptr::null_mut();
+-            let result = (*dxgi_factory).EnumAdapters1(0, &mut dxgi_adapter_1);
+-            if !winerror::SUCCEEDED(result) {
++            if candidates.is_empty() {
+                 return Err(Error::NoAdapterFound);
+             }
+-            assert!(!dxgi_adapter_1.is_null());
+-            let dxgi_adapter_1 = ComPtr::from_raw(dxgi_adapter_1);
++
++            let is_software = |desc: &dxgi::DXGI_ADAPTER_DESC1| {
++                (desc.Flags & dxgi::DXGI_ADAPTER_FLAG_SOFTWARE) != 0
++                    || (desc.VendorId == MICROSOFT_PCI_ID && desc.DeviceId == BASIC_RENDER_DEVICE_ID)
++            };
++            let preferred = |desc: &dxgi::DXGI_ADAPTER_DESC1| match vendor_preference {
++                VendorPreference::Prefer(vendor_id) => vendor_id == desc.VendorId,
++                VendorPreference::Avoid(vendor_id) => vendor_id != desc.VendorId,
++                VendorPreference::None => true,
++            };
++            let chosen = if d3d_driver_type == D3D_DRIVER_TYPE_WARP {
++                // WARP ignores the adapter (D3D11CreateDevice gets NULL).
++                0
++            } else {
++                candidates
++                    .iter()
++                    .position(|(_, d)| !is_software(d) && preferred(d))
++                    .or_else(|| candidates.iter().position(|(_, d)| !is_software(d)))
++                    .unwrap_or(0)
++            };
++            let (dxgi_adapter_1, desc) = &candidates[chosen];
++            let name_len = desc
++                .Description
++                .iter()
++                .position(|&c| c == 0)
++                .unwrap_or(desc.Description.len());
++            log::info!(
++                "surfman: D3D11 adapter {} of {}: {} (vendor {:#06x}, device {:#06x}{})",
++                chosen,
++                candidates.len(),
++                String::from_utf16_lossy(&desc.Description[..name_len]),
++                desc.VendorId,
++                desc.DeviceId,
++                if d3d_driver_type == D3D_DRIVER_TYPE_WARP || is_software(desc) {
++                    ", software"
++                } else {
++                    ""
++                }
++            );
+ 
+             let mut dxgi_adapter: *mut IDXGIAdapter = ptr::null_mut();
+             let result = (*dxgi_adapter_1).QueryInterface(

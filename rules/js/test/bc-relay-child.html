@@ -1,0 +1,7 @@
+<!doctype html>
+<!-- Posts one BroadcastChannel message (see README.md). Copyright (c) 2026 JustMyth / Tan Ming Jing. SPDX-License-Identifier: MPL-2.0. -->
+<script>
+var c = new BroadcastChannel("mb-relay-test");
+c.postMessage({ from: location.search ? "same-origin frame" : "redirected frame" });
+c.close();
+</script>

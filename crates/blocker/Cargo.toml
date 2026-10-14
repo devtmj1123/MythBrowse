@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-blocker"
+description = "MythBrowse built-in content blocker (domain blocklist, Phase 0)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]

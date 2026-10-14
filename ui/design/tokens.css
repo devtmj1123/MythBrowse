@@ -1,0 +1,455 @@
+/* SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing */
+/*
+ * JustMyth design tokens: the MythDesk desktop design system (MythDesk style.css), shared by MythBrowse. Same variable names and values as MythDesk,
+ * so CSS can move between the two products unchanged. See docs/DESIGN.md.
+ *
+ *   <link rel="stylesheet" href="design/tokens.css">
+ *   <script src="design/theme.js"></script>   time of day: data-phase / data-tone on <html>
+ *   <script src="design/icons.js"></script>   MythDesk line icons (inline SVG)
+ *   <script src="design/sky.js"></script>     the MythDesk living sky on <canvas id="sky">
+ *
+ * Day and dawn use light frosted glass; dusk, evening and night dark glass (as in MythDesk).
+ *
+ * Servo 0.1.4 substitutions (the only places this differs from MythDesk):
+ *  - no backdrop-filter: the glass is a little more opaque (MythDesk 0.46 / 0.62 white by day)
+ *    so text stays readable over the clouds without the blur behind it;
+ *  - no CSS grid: flexbox only;  - no text-overflow: fade-out overlays;
+ *  - no variable fonts: static "Segoe UI" instead of "Segoe UI Variable Text/Display";
+ *  - no color-mix(): the focus ring is a plain rgba token (--accent-ring);
+ *  - gradients fade to a zero-alpha copy of the same colour, never `transparent`.
+ */
+
+/* Dark glass (dusk, evening, night): MythDesk's :root defaults. */
+:root {
+  --glass: rgba(18, 24, 46, 0.62);
+  --glass-hi: rgba(28, 36, 64, 0.70);
+  --glass-you: rgba(140, 150, 190, 0.34);
+  --chip: rgba(255, 255, 255, 0.12);
+  --chip-hi: rgba(255, 255, 255, 0.22);
+  --line: rgba(255, 255, 255, 0.10);
+  --text: #f3f5ff;
+  --soft: rgba(232, 236, 255, 0.64);
+  --dim: rgba(232, 236, 255, 0.42);
+  --ink: #ffffff;
+  --ink-text: #12182e;
+  --accent: #b9a8ff;
+  --accent-ring: rgba(185, 168, 255, 0.45);
+  --ok: #4fe0a0;
+  --warn: #ffc65c;
+  --bad: #ff6b85;
+  --r-lg: 22px;
+  --r-md: 16px;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  --lift: 0 18px 40px rgba(10, 16, 40, 0.18);
+
+  --font: "Segoe UI", "Inter", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Noto Sans", "Noto Sans CJK SC", "Helvetica Neue", "DejaVu Sans", Arial, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace;
+
+  /* the three Myth dots */
+  --dot-1: #a99bff;
+  --dot-2: #7fd3ff;
+  --dot-3: #ff9cc6;
+
+  /* sky colours, kept current by theme.js (defaults: a day sky) */
+  --sky-top: #6698d2;
+  --sky-mid: #a2c1e2;
+  --sky-low: #d0d8de;
+  --sky-top-0: rgba(102, 152, 210, 0);
+  --tab-solid: #dfe9f5;
+  --tab-solid-0: rgba(223, 233, 245, 0);
+}
+
+/* Light glass for the bright part of the day (MythDesk body[data-phase="day"|"dawn"]). */
+[data-tone="light"] {
+  --glass: rgba(255, 255, 255, 0.56);
+  --glass-hi: rgba(255, 255, 255, 0.72);
+  --glass-you: rgba(30, 48, 92, 0.78);
+  --chip: rgba(20, 30, 60, 0.07);
+  --chip-hi: rgba(20, 30, 60, 0.14);
+  --line: rgba(20, 30, 60, 0.10);
+  --text: #16203a;
+  --soft: rgba(22, 32, 58, 0.62);
+  --dim: rgba(22, 32, 58, 0.40);
+  --ink: #16203a;
+  --ink-text: #ffffff;
+  --accent: #5b4bd6;
+  --accent-ring: rgba(91, 75, 214, 0.40);
+  --bad: #e2486a;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset, 0 0 0 1px rgba(255, 255, 255, 0.35) inset;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body {
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; cursor: default; border: 0; color: inherit; background: rgba(0, 0, 0, 0); padding: 0; }
+a { color: inherit; text-decoration: none; }
+
+/* The living sky canvas (sky.js). Pages that sit under the browser chrome bleed it 12 px past
+   every edge so MythDesk's blur never shows a soft edge. */
+#sky { position: fixed; z-index: 0; display: block; }
+.sky-page #sky {
+  top: -12px; left: -12px; width: calc(100% + 24px); height: calc(100% + 24px);
+  filter: blur(5px);
+}
+.sky-page { background: var(--sky-mid); }
+
+/* ---- MythDesk building blocks ---------------------------------------------------------- */
+[data-icon] { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ico { display: block; flex: none; }
+.soft { color: var(--soft); }
+.small { font-size: 12px; }
+
+.glass { background: var(--glass); border-radius: var(--r-lg); box-shadow: var(--shadow); }
+.primary { background: var(--ink); color: var(--ink-text); padding: 10px 22px; border-radius: 12px; font-weight: 600; }
+.ghost { color: var(--soft); border: 1px solid var(--line); padding: 7px 14px; border-radius: 10px; }
+.ghost:hover { color: var(--text); background: var(--chip); }
+.chip { padding: 3px 9px; border-radius: 8px; background: var(--chip); font-size: 12px; font-weight: 600; white-space: nowrap; flex: none; }
+
+/* Section label inside a card: MythDesk .w-title. */
+.w-title {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--soft); font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+}
+
+code, kbd, .kbd {
+  background: var(--chip); padding: 1px 6px; border-radius: 6px; font-size: 0.85em;
+  font-family: var(--font-mono); color: var(--dim);
+}
+
+input.field {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--chip);
+  border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; outline: none;
+}
+input.field:focus { border-color: var(--accent); }
+
+/* The Myth mark: MythDesk's launcher logo (two dots over one). Size with font-size. */
+.mark { display: inline-flex; flex-wrap: wrap; justify-content: center; width: 1.25em; font-size: 8px; }
+.mark i { display: block; width: 0.5em; height: 0.5em; margin: 0.06em; border-radius: 50%; background: var(--dot-1); }
+.mark i:nth-child(2) { background: var(--dot-2); }
+.mark i:nth-child(3) { background: var(--dot-3); }
+
+/* MythDesk title-bar dots: three in a row. */
+.tb-dots { display: inline-flex; align-items: center; }
+.tb-dots i { display: block; width: 5px; height: 5px; margin-right: 3px; border-radius: 50%; background: var(--dot-1); }
+.tb-dots i:nth-child(2) { background: var(--dot-2); }
+.tb-dots i:nth-child(3) { background: var(--dot-3); margin-right: 0; }
+
+/* Site letter tile (no favicons yet), shaped like a MythDesk app icon. */
+.site {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 6px; background: var(--chip);
+  color: var(--text); font-size: 11px; font-weight: 700; line-height: 20px;
+}
+
+/* ---- motion ------------------------------------------------------------------------------
+   Every page animates only on state changes (CSS transitions / short keyframes; no idle
+   loops). <html data-motion> comes from Settings > Motion combined with the OS setting
+   (theme.js / the shell): "reduced" keeps colour and opacity fades but nothing moves,
+   "off" turns transitions and animations off. prefers-reduced-motion is honoured too where
+   the engine reports it. Elements that slide or grow use the .mv-* classes below. */
+:root { --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1); }
+html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after {
+  animation-duration: 0.001s !important;
+  animation-iteration-count: 1 !important;
+  transition-property: opacity, color, background-color !important;
+}
+html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="off"]) *, html:not([data-motion="off"]) *::before, html:not([data-motion="off"]) *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color !important;
+  }
+}
+/* Shared entrances: fade + small rise, fade + slide from the right, pop. */
+@keyframes mv-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes mv-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes mv-pop { 0% { opacity: 0; transform: scale(0.96); } 100% { opacity: 1; transform: none; } }
+@keyframes mv-fade { from { opacity: 0; } to { opacity: 1; } }
+.mv-rise { animation: mv-rise 0.28s var(--ease-out) both; }
+.mv-slide { animation: mv-slide 0.32s var(--ease-out) both; }
+.mv-pop { animation: mv-pop 0.22s var(--ease-out) both; }
+.mv-fade { animation: mv-fade 0.25s ease both; }
+
+/* ---- liquid glass (flat revision, approved 2026-10-10) -------------------
+   html[data-glass] comes from the shell (meta mb-glass / JMGlass.setMode):
+     blur  the shell draws the sky and blurs it (and the page) under every [data-glass]
+           surface; the pages are transparent and the glass is a light tint over that blur;
+     flat  the shell draws the sky but the blur is unavailable: a denser tint;
+     off   the page draws its own sky (sky.js) and uses the MythDesk tints above.
+   The material is flat: blur + a tint + one uniform hairline. No sheen, no inner glow, no
+   bevel. Chrome casts no shadow; only floating panels (data-glass="f") get --lg-float.
+   [data-glass] on an element = c chrome (tabs, address bar), p panel/bubble, f floating. */
+/* Transparency (Settings > Appearance, Oct 11 2026): every
+   glass value below is interpolated from ONE number, --glass-level, in "steps from the approved
+   B look" (A = -1, C = +1). The slider (0-100, default 50) maps to it piecewise linearly:
+   0 -> -1.5 (more solid than A), 50 -> 0 (B), 100 -> +1 (C); motion.js sets it on <html> from
+   the shell's meta / pushes (mythbrowse_engine::glass::glass_level is the same function). The
+   shell's own blur radius, saturation and brightness follow the same level (GlassLook::at).
+   --lg-tint-float is for surfaces that float over an arbitrary web page (Myth pill / approval
+   card, Tasks over a page, compat panel, peek): it never gets clearer than .40 light / .44 dark,
+   whatever the slider says. Servo's stylo 0.15 parses calc() / min() / max() / clamp() inside
+   colour components (color/component.rs), so this needs no JS colour maths. */
+:root {
+  --hair: 1px;
+  --glass-level: 0;
+  --lg-tint: rgba(22, 28, 56, calc(0.22 - 0.06 * var(--glass-level)));
+  --lg-tint-strong: rgba(16, 22, 46, calc(0.34 - 0.09 * var(--glass-level)));
+  --lg-tint-float: rgba(16, 22, 46, max(0.44, calc(0.34 - 0.09 * var(--glass-level))));
+  --lg-rim: rgba(255, 255, 255, calc(0.18 + 0.02 * var(--glass-level)));
+  --lg-spec: rgba(255, 255, 255, calc(0.12 + 0.02 * var(--glass-level)));
+  --lg-float: 0 4px 18px rgba(2, 6, 22, 0.20);
+  --btn-glass: rgba(255, 255, 255, calc(0.09 - 0.01 * var(--glass-level)));
+  --btn-glass-hi: rgba(255, 255, 255, calc(0.16 - 0.02 * var(--glass-level)));
+  /* What the shell's blur does (and the page-side blur of the chat behind the settings sheet). */
+  --lg-blur-k: clamp(0.3, calc(0.5 - 0.165 * var(--glass-level)), 0.8);
+  --lg-sat: clamp(1, calc(1.5 + 0.1 * var(--glass-level)), 1.7);
+  --lg-bright: clamp(0.85, calc(0.92 - 0.04 * var(--glass-level)), 1.15);
+  /* A soft shadow behind text on glass, so it survives a busier backdrop. */
+  --lg-halo: 0 1px 2px rgba(4, 8, 24, calc(0.45 + 0.1 * var(--glass-level))),
+    0 0 calc(8px + 2px * var(--glass-level)) rgba(4, 8, 24, calc(0.25 + 0.1 * var(--glass-level)));
+  --scrim: rgba(4, 8, 24, calc(0.20 - 0.04 * var(--glass-level)));
+  /* Labels sitting directly on a panel body: the main text colour at .85, not --soft. */
+  --label: rgba(243, 245, 255, 0.85);
+  --ctl-track: rgba(255, 255, 255, 0.10);
+  --ctl-on: #3fc98c;
+  --seg-sel: rgba(255, 255, 255, 0.16);
+  --seg-rim: rgba(255, 255, 255, 0.10);
+  --rail: rgba(255, 255, 255, 0.04);
+  --rail-rim: rgba(255, 255, 255, 0.09);
+  /* Spring fallbacks; motion.js replaces them with linear() curves at load. */
+  --spr-snappy: cubic-bezier(0.2, 0.9, 0.25, 1.08); --d-snappy: 420ms;
+  --spr-bouncy: cubic-bezier(0.25, 1.15, 0.45, 1); --d-bouncy: 480ms;
+  --spr-release: cubic-bezier(0.25, 1.1, 0.45, 1); --d-release: 380ms;
+  --spr-soft: cubic-bezier(0.2, 0.8, 0.2, 1); --d-soft: 380ms;
+  --spr-morph: cubic-bezier(0.25, 1.2, 0.4, 1); --d-morph: 520ms;
+  --press-t: transform var(--d-release) var(--spr-release), opacity 0.22s ease;
+}
+[data-tone="light"] {
+  --lg-tint: rgba(255, 255, 255, calc(0.14 - 0.06 * var(--glass-level)));
+  --lg-tint-strong: rgba(255, 255, 255, calc(0.30 - 0.10 * var(--glass-level)));
+  --lg-tint-float: rgba(255, 255, 255, max(0.40, calc(0.30 - 0.10 * var(--glass-level))));
+  --lg-rim: rgba(255, 255, 255, calc(0.55 + 0.05 * var(--glass-level)));
+  --lg-spec: rgba(255, 255, 255, calc(0.53 + 0.075 * var(--glass-level)));
+  --lg-float: 0 4px 18px rgba(16, 26, 60, 0.08);
+  /* Inner rows (inputs, model list, task cards, approval details) stay the denser text
+     backing; only the panel body itself gets clear. */
+  --btn-glass: rgba(255, 255, 255, calc(0.375 - 0.01 * var(--glass-level)));
+  --btn-glass-hi: rgba(255, 255, 255, calc(0.535 - 0.01 * var(--glass-level)));
+  --lg-bright: clamp(0.85, calc(1.08 + 0.045 * var(--glass-level)), 1.15);
+  --lg-halo: 0 0 2px rgba(255, 255, 255, calc(0.62 + 0.08 * var(--glass-level))),
+    0 0 calc(8px + 2px * var(--glass-level)) rgba(255, 255, 255, calc(0.62 + 0.08 * var(--glass-level)));
+  --scrim: rgba(16, 24, 52, calc(0.08 - 0.02 * var(--glass-level)));
+  --label: rgba(22, 32, 58, 0.85);
+  /* Secondary text darkens a little as the glass clears; --dim never below .58 and a darker
+     danger red (both were under 3:1 on translucent rows even before; NOTES section 4). */
+  --soft: rgba(22, 32, 58, calc(0.78 + 0.04 * var(--glass-level)));
+  --dim: rgba(22, 32, 58, max(0.58, calc(0.58 + 0.04 * var(--glass-level))));
+  --bad: #c42d50;
+  --ctl-track: rgba(22, 32, 70, 0.10);
+  --ctl-on: #2fb87a;
+  --seg-sel: rgba(255, 255, 255, 0.62);
+  --seg-rim: rgba(255, 255, 255, 0.70);
+  --rail: rgba(255, 255, 255, calc(0.09 - 0.03 * var(--glass-level)));
+  --rail-rim: rgba(255, 255, 255, 0.45);
+}
+@media (min-resolution: 2dppx) { :root { --hair: 0.5px; } }
+
+/* Every surface: one hairline instead of MythDesk's inset highlight; panels lose --lift (only
+   floating panels cast a shadow). */
+:root, [data-tone="light"] { --shadow: inset 0 0 0 var(--hair) var(--lg-rim), inset 0 1px 0 var(--lg-spec); --lift: 0 0 0 rgba(0, 0, 0, 0); }
+/* With the shell's blur behind them the tints get light (the backdrop does the work). */
+html[data-glass="blur"] { --glass: var(--lg-tint); --glass-hi: var(--lg-tint-strong); }
+html[data-glass="blur"] [data-tone="light"], html[data-glass="blur"][data-tone="light"] {
+  --glass: var(--lg-tint); --glass-hi: var(--lg-tint-strong);
+}
+/* The shell draws the sky: pages are transparent and draw none of their own. */
+html[data-glass="blur"], html[data-glass="flat"],
+html[data-glass="blur"] body, html[data-glass="flat"] body {
+  background: rgba(0, 0, 0, 0) !important; background-image: none !important;
+}
+html[data-glass="blur"] #sky, html[data-glass="flat"] #sky { display: none; }
+[data-glass="f"] { box-shadow: var(--shadow), var(--lg-float) !important; }
+/* Text on glass gets the halo (navy / filled buttons excepted). */
+html[data-glass="blur"] [data-glass], html[data-glass="blur"] .glass { text-shadow: var(--lg-halo); }
+html[data-glass="blur"] .navy, html[data-glass="blur"] .primary, html[data-glass="blur"] .send,
+html[data-glass="blur"] .msg.you, html[data-glass="blur"] .chip.status, html[data-glass="blur"] .model-chip.on,
+html[data-glass="blur"] .sw, html[data-glass="blur"] .slider { text-shadow: none; }
+
+/* Press: a slight shrink + dim, springing back on release, on every button. */
+button, .press { transition: var(--press-t); }
+button:active:not([disabled]), .press:active { transform: scale(0.97); opacity: 0.82; transition: transform 0.1s cubic-bezier(0.3, 0.7, 0.4, 1), opacity 0.1s ease; }
+html[data-motion="reduced"] button:active, html[data-motion="reduced"] .press:active { transform: none !important; opacity: 0.7; }
+
+/* Segmented control: a flat translucent pill (motion.js .seg-pill) slides under the labels by
+   transform only; the selected button itself stays transparent. */
+.seg.seg-live { position: relative; isolation: isolate; background: var(--ctl-track); }
+.seg.seg-live > button { position: relative; z-index: 1; background: rgba(0, 0, 0, 0) !important; box-shadow: none !important; }
+.seg.seg-live > button:active { transform: none; opacity: 1; }
+.seg.seg-live > button.under { color: var(--text); }
+.seg.lift > button.on:not(.under) { color: var(--soft); font-weight: 400; }
+.seg-pill {
+  position: absolute; z-index: 0; top: 4px; bottom: 4px; left: 0; width: 10px; border-radius: 9px;
+  background: var(--seg-sel); box-shadow: inset 0 0 0 var(--hair) var(--seg-rim);
+  pointer-events: none; will-change: transform; transition: opacity 0.18s ease;
+}
+
+/* Switch: flat track, flat white thumb, the green fill fades in with the thumb's position. */
+.sw { position: relative; flex: none; width: 52px; height: 30px; border-radius: 15px; background: var(--ctl-track); isolation: isolate; }
+.sw:active { transform: none !important; opacity: 1 !important; }
+.sw b { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: inherit; background: var(--ctl-on); opacity: 0; pointer-events: none; will-change: opacity; }
+.sw i { position: absolute; left: 2px; top: 2px; width: 26px; height: 26px; border-radius: 13px; pointer-events: none;
+  background: #ffffff; box-shadow: 0 1px 2px rgba(8, 14, 38, 0.14); will-change: transform; }
+
+/* Slider (motion.js slider()): flat track, navy fill and a flat white thumb, moved by transform
+   only; a small tick marks the default. role="slider", arrow keys / Home / End. */
+.slider { position: relative; height: 30px; outline: none; touch-action: none; }
+.slider .sl-track { position: absolute; left: 12px; right: 12px; top: 12px; height: 6px; border-radius: 3px; background: var(--ctl-track); overflow: hidden; }
+.slider .sl-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; border-radius: 3px; background: var(--navy, var(--ink));
+  transform-origin: 0 50%; will-change: transform; }
+.slider .sl-tick { position: absolute; top: 8px; width: 2px; height: 14px; margin-left: -1px; border-radius: 1px; background: var(--dim); pointer-events: none; }
+.slider .sl-thumb { position: absolute; left: 0; top: 3px; width: 24px; height: 24px; border-radius: 12px; pointer-events: none;
+  background: #ffffff; box-shadow: 0 1px 3px rgba(8, 14, 38, 0.22), inset 0 0 0 var(--hair) rgba(20, 30, 60, 0.12); will-change: transform; }
+.slider:focus-visible .sl-thumb { box-shadow: 0 1px 3px rgba(8, 14, 38, 0.22), 0 0 0 3px var(--accent-ring); }
+.slider.off { opacity: 0.45; }
+
+/* Panels open from their origin (motion.js pop / unpop), messages rise in (rise). */
+/* Prototype Motion.popIn / popOut, as two CSS animations (Servo has no Web Animations):
+   opacity 0->1 in 150 ms linear while the scale springs from `from` (snappy); out: opacity
+   150 ms ease-in while the scale goes to `to` in 170 ms cubic-bezier(.4,0,1,1). The from / to
+   scale is per surface (prototype: sheet .6 / .9, panels .5, peek .3 / .6, default .82 / .92),
+   chosen by a .mv-from-* / .mv-to-* class set by motion.js pop(el, origin, {from, to}). */
+@keyframes mv-op-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mv-op-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes mv-grow-82 { from { transform: scale(0.82); } to { transform: none; } }
+@keyframes mv-grow-60 { from { transform: scale(0.6); } to { transform: none; } }
+@keyframes mv-grow-50 { from { transform: scale(0.5); } to { transform: none; } }
+@keyframes mv-grow-30 { from { transform: scale(0.3); } to { transform: none; } }
+@keyframes mv-shrink-92 { from { transform: none; } to { transform: scale(0.92); } }
+@keyframes mv-shrink-90 { from { transform: none; } to { transform: scale(0.9); } }
+@keyframes mv-shrink-60 { from { transform: none; } to { transform: scale(0.6); } }
+/* Message bubbles (prototype bubble()): translateY(16px) scale(.86) -> none, bouncy. */
+@keyframes mv-msg { from { opacity: 0; transform: translateY(16px) scale(0.86); } to { opacity: 1; transform: none; } }
+.mv-pop-in { animation: mv-op-in 150ms linear both, mv-grow-82 var(--d-snappy) var(--spr-snappy) both; }
+.mv-pop-in.mv-from-60 { animation-name: mv-op-in, mv-grow-60; }
+.mv-pop-in.mv-from-50 { animation-name: mv-op-in, mv-grow-50; }
+.mv-pop-in.mv-from-30 { animation-name: mv-op-in, mv-grow-30; }
+.mv-pop-out { animation: mv-op-out 150ms ease-in both, mv-shrink-92 170ms cubic-bezier(0.4, 0, 1, 1) both; }
+.mv-pop-out.mv-to-90 { animation-name: mv-op-out, mv-shrink-90; }
+.mv-pop-out.mv-to-60 { animation-name: mv-op-out, mv-shrink-60; }
+.mv-msg { animation: mv-msg var(--d-bouncy) var(--spr-bouncy) both; transform-origin: 50% 100%; }
+/* Rebind the older entrances to the springs too. */
+.mv-rise { animation: mv-rise var(--d-soft) var(--spr-soft) both; }
+.mv-slide { animation: mv-slide var(--d-snappy) var(--spr-snappy) both; }
+.mv-pop { animation: mv-pop var(--d-snappy) var(--spr-snappy) both; }
+/* Reduced: fades only (the keyframes above move; swap them for a fade). */
+html[data-motion="reduced"] .mv-pop-in, html[data-motion="reduced"] .mv-msg,
+html[data-motion="reduced"] .mv-rise, html[data-motion="reduced"] .mv-slide, html[data-motion="reduced"] .mv-pop {
+  animation: mv-fade 0.2s ease both !important;
+}
+html[data-motion="reduced"] .mv-pop-in { animation: mv-fade 0.2s linear both !important; }
+html[data-motion="reduced"] .mv-pop-out { animation: mv-op-out 0.16s ease-in both !important; }
+
+/* ---- Reduce transparency (Settings > Appearance, or Windows "Transparency effects" off) ------
+   html[data-transparency="reduced"]: solid, flat surfaces; the shell stops blurring
+   (GlassLook::solid). Last in the file so it wins over the blur-mode mappings above. */
+html[data-transparency="reduced"] {
+  --lg-tint: rgba(30, 37, 66, 0.97); --lg-tint-strong: rgba(24, 30, 56, 0.98); --lg-tint-float: rgba(24, 30, 56, 0.98);
+  --glass: var(--lg-tint); --glass-hi: var(--lg-tint-strong);
+  --lg-halo: 0 0 0 rgba(0, 0, 0, 0); --lg-spec: rgba(255, 255, 255, 0); --lg-blur-k: 0;
+  --scrim: rgba(4, 8, 24, 0.45); --rail: rgba(24, 30, 56, 0.92);
+}
+html[data-transparency="reduced"][data-tone="light"], html[data-transparency="reduced"] [data-tone="light"] {
+  --lg-tint: rgba(244, 247, 252, 0.97); --lg-tint-strong: rgba(250, 251, 253, 0.98); --lg-tint-float: rgba(250, 251, 253, 0.98);
+  --glass: var(--lg-tint); --glass-hi: var(--lg-tint-strong);
+  --btn-glass: rgba(22, 32, 70, 0.06); --btn-glass-hi: rgba(22, 32, 70, 0.11); --lg-rim: rgba(22, 32, 70, 0.12);
+  --lg-halo: 0 0 0 rgba(0, 0, 0, 0); --lg-spec: rgba(255, 255, 255, 0);
+  --scrim: rgba(16, 24, 52, 0.28); --rail: rgba(244, 247, 252, 0.92);
+}
+html[data-transparency="reduced"] [data-glass], html[data-transparency="reduced"] .glass { text-shadow: none; }
+
+/* ---- v0.4: surfaces that overlap other content ---------------------------------------------
+   Menus, dropdowns (the address-bar suggestions, context menus, .dd lists), a page's dialog /
+   permission sheet and tooltips sit over arbitrary content (text, a busy web page, other glass).
+   At the panel tints (.40-.44) that content bled through and made them hard to read, so they are
+   near-opaque tinted glass (.95) whatever the Transparency setting; base panels keep their tint.
+   Reduce transparency (above) is .98 already. */
+:root, [data-tone="dark"] {
+  --menu-bg: rgba(22, 28, 52, 0.95);
+  --menu-rim: rgba(255, 255, 255, 0.14);
+  --menu-hi: rgba(255, 255, 255, 0.10);
+  --menu-shadow: 0 10px 30px rgba(2, 6, 22, 0.34), 0 2px 6px rgba(2, 6, 22, 0.22);
+}
+[data-tone="light"] {
+  --menu-bg: rgba(251, 252, 254, 0.95);
+  --menu-rim: rgba(20, 30, 60, 0.12);
+  --menu-hi: rgba(20, 30, 60, 0.07);
+  --menu-shadow: 0 10px 30px rgba(16, 26, 60, 0.16), 0 2px 6px rgba(16, 26, 60, 0.08);
+}
+html[data-transparency="reduced"] { --menu-bg: rgba(24, 30, 56, 0.99); }
+html[data-transparency="reduced"][data-tone="light"], html[data-transparency="reduced"] [data-tone="light"] { --menu-bg: rgba(251, 252, 254, 0.99); }
+
+/* ---- v0.4: button labels centred without font metrics ----------------------------------------
+   On Windows (Segoe UI) labels sat above centre: the old buttons centred text with
+   line-height = height, which depends on the font's ascent / descent. Every button-like control
+   is now a flex box that centres its content, with line-height 1. */
+.pill-btn, .seg-btn, .ghost, .primary, .sh-btn, .dd-btn, .chip-btn, .set-btn {
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+}
+.pill-btn > span, .seg-btn > span, .ghost > span, .primary > span, .sh-btn > span, .dd-btn > span { line-height: 1; }
+
+/* ---- v0.4: custom dropdown (design/select.js) -------------------------------------------------
+   Replaces every native <select> (Windows drew a grey system control on the glass). The <select>
+   stays in the DOM, hidden, as the value and its change events; .dd is the button + list. */
+.dd { position: relative; display: inline-flex; flex: none; }
+/* No box at all (v0.4.1): the 1px overflow:hidden native <select> was a scroll container whose
+   UA content changes when pages fill its options, and Servo 0.1.4 panicked reading its scrollable
+   overflow (Passwords page; docs/REGRESSIONS.md). The <select> is still the value store. */
+.dd-native { display: none !important; }
+.dd-btn {
+  gap: 8px; min-width: 112px; height: 34px; padding: 0 10px 0 13px; border-radius: 12px; justify-content: space-between;
+  background: var(--btn-glass, var(--chip)); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600;
+  box-shadow: inset 0 0 0 var(--hair) var(--lg-rim, var(--line)); white-space: nowrap; transition: var(--press-t);
+}
+.dd-btn:hover { background: var(--btn-glass-hi, var(--chip-hi)); }
+.dd-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.dd-btn[disabled] { opacity: 0.5; }
+.dd-btn .dd-chev { display: inline-flex; flex: none; opacity: 0.7; transition: transform 0.16s ease; }
+.dd.open .dd-btn .dd-chev { transform: rotate(180deg); }
+.dd-list {
+  position: fixed; z-index: 50; left: 0; top: 0; max-height: 280px; overflow-y: auto;
+  margin: 0; padding: 5px; list-style: none; border-radius: 14px; outline: none;
+  background: var(--menu-bg); box-shadow: inset 0 0 0 var(--hair) var(--menu-rim), var(--menu-shadow);
+  color: var(--text); text-shadow: none; transform-origin: top right;
+}
+.dd-list.up { transform-origin: bottom right; }
+.dd-opt {
+  display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px 0 8px; border-radius: 9px;
+  font-size: 13.5px; line-height: 1; white-space: nowrap; cursor: default;
+}
+.dd-opt .dd-tick { display: inline-flex; width: 16px; flex: none; opacity: 0; }
+.dd-opt[aria-selected="true"] .dd-tick { opacity: 1; }
+.dd-opt[aria-selected="true"] { font-weight: 600; }
+.dd-opt.on { background: var(--menu-hi); }
+.dd-opt[aria-disabled="true"] { opacity: 0.5; }
+.dd-list.dd-in { animation: dd-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.dd-list.dd-out { animation: dd-out 100ms ease-in both; }
+@keyframes dd-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes dd-out { from { opacity: 1; } to { opacity: 0; } }
+.dd-list.up.dd-in { animation-name: dd-in-up; }
+@keyframes dd-in-up { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
+html[data-motion="reduced"] .dd-list.dd-in { animation: mv-fade 0.12s ease both !important; }
+html[data-motion="off"] .dd-list.dd-in, html[data-motion="off"] .dd-list.dd-out { animation: none !important; }
+
+/* Tooltip-like hints (title-less, .tip): the same near-opaque surface. */
+.tip { background: var(--menu-bg); box-shadow: inset 0 0 0 var(--hair) var(--menu-rim), var(--menu-shadow); color: var(--text); text-shadow: none; }

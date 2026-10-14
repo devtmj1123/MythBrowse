@@ -1,0 +1,15 @@
+--- a/dom/userscripts.rs	2026-10-09 09:57:10.128000000 +0000
++++ b/dom/userscripts.rs	2026-10-09 09:57:10.189946709 +0000
+@@ -18,6 +18,12 @@
+     let win = DomRoot::from_ref(doc.window());
+     doc.add_delayed_task(task!(UserScriptExecute: |cx, win: DomRoot<Window>| {
+         let global_scope = win.as_global_scope();
++        // MythBrowse patch: a sandboxed (no allow-scripts) or not-fully-active document must
++        // not run user scripts; evaluate_js_on_global asserts can_run_script() and the panic
++        // takes down the whole script thread (e.g. `<iframe sandbox>` on amazon.com/zoom.us).
++        if !global_scope.can_run_script() {
++            return;
++        }
+         let mut realm = enter_auto_realm(cx, global_scope);
+         let cx = &mut realm.current_realm();
+ 

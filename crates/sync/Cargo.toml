@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-sync"
+description = "MythBrowse E2E-encrypted sync client (Appwrite backend)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+url = { workspace = true, features = ["serde"] }
+zeroize = { version = "1.8", features = ["derive"] }
+# All pure Rust and already in Cargo.lock (Servo / mythbrowse-ai use the same versions): no new C build.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+getrandom = { version = "0.2", features = ["std"] }
+data-encoding = "2.10"
+# Same client and TLS setup as mythbrowse-ai (process-wide rustls provider installed by the shell).
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }

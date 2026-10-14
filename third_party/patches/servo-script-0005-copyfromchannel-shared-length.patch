@@ -1,0 +1,17 @@
+diff --git a/dom/audio/audiobuffer.rs b/dom/audio/audiobuffer.rs
+index df9825e..b3d788b 100644
+--- a/dom/audio/audiobuffer.rs
++++ b/dom/audio/audiobuffer.rs
+@@ -289,7 +289,11 @@ impl AudioBufferMethods<crate::DomTypeHolder> for AudioBuffer {
+             }
+         } else if let Some(ref shared_channels) = *self.shared_channels.borrow() {
+             if let Some(shared_channel) = shared_channels.buffers.get(channel_number) {
+-                dest.extend_from_slice(&shared_channel.as_slice()[offset..offset + bytes_to_copy]);
++                // MythBrowse (servo-script 0005): `dest` already holds `bytes_to_copy` zeros;
++                // `extend_from_slice` doubled it and `destination.update` then asserted
++                // `data.len() <= buffer.len()` (shopee.co.id audio fingerprint, script-thread
++                // panic). Copy into it instead.
++                dest.copy_from_slice(&shared_channel.as_slice()[offset..offset + bytes_to_copy]);
+             }
+         }
+ 

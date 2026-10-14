@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- "View page source" (context menu): the page's document as it was when asked (Servo 0.1.4
+     has no view-source: scheme). The shell keeps the capture; /api/source?id= returns it.
+     Shown as plain text, never parsed as HTML. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mb-token" content="{{MB_TOKEN}}">
+  <meta name="mb-glass" content="{{MB_GLASS}}">
+  <meta name="mb-transparency" content="{{MB_TRANSPARENCY}}">
+  <meta name="mb-reduce-transparency" content="{{MB_REDUCE_TRANSPARENCY}}">
+  <meta name="mb-theme-hour" content="{{MB_THEME_HOUR}}">
+  <title>Page source</title>
+  <link rel="stylesheet" href="design/tokens.css">
+  <link rel="stylesheet" href="home.css">
+  <script src="design/theme.js"></script>
+  <script src="design/icons.js"></script>
+  <script src="design/motion.js"></script>
+</head>
+<body class="sky-page library-page">
+  <canvas id="sky" data-above="88" data-bleed="12" aria-hidden="true"></canvas>
+  <main class="library">
+    <header><h1>Page source</h1><span id="src-url" class="soft"></span></header>
+    <section class="glass panel"><pre id="src" class="source-view"></pre></section>
+  </main>
+  <script src="design/sky.js"></script>
+  <script src="source.js"></script>
+</body>
+</html>

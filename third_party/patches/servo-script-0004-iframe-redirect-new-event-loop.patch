@@ -1,0 +1,98 @@
+diff --git a/script_thread.rs b/script_thread.rs
+index f514641..cf99358 100644
+--- a/script_thread.rs
++++ b/script_thread.rs
+@@ -3969,6 +3969,47 @@ impl ScriptThread {
+         }
+     }
+ 
++    /// MythBrowse (servo-script 0004): the redirect target of an `<iframe>` navigation when
++    /// following it in this pipeline would put the document in the wrong event loop: a GET
++    /// load, not origin-sandboxed, started by a script document (the parent, or the frame
++    /// itself) whose site is the target's site, while the URL this pipeline was created for
++    /// (which chose its event loop) is another site. Sites are compared as the constellation
++    /// keys event loops: registered domain, or the IP address.
++    fn redirect_needs_new_event_loop(
++        load: &InProgressLoad,
++        metadata: &Metadata,
++    ) -> Option<ServoUrl> {
++        use net_traits::pub_domains::registered_domain_name;
++        if load.parent_info.is_none() ||
++            load.load_data.method != http::Method::GET ||
++            load.load_data.creation_sandboxing_flag_set.contains(
++                content_security_policy::sandboxing_directive::SandboxingFlagSet::SANDBOXED_ORIGIN_BROWSING_CONTEXT_FLAG,
++            )
++        {
++            return None;
++        }
++        let LoadOrigin::Script(initiator) = &load.load_data.load_origin else {
++            return None;
++        };
++        let Some(Ok(location)) = &metadata.location_url else {
++            return None;
++        };
++        let target_site = registered_domain_name(location)?;
++        let initiator_site = match initiator.immutable() {
++            ImmutableOrigin::Tuple(_, url::Host::Domain(domain), _) => url::Host::Domain(String::from(
++                net_traits::pub_domains::reg_suffix(domain),
++            )),
++            ImmutableOrigin::Tuple(_, ip, _) => ip.clone(),
++            ImmutableOrigin::Opaque(_) => return None,
++        };
++        if target_site != initiator_site ||
++            registered_domain_name(&load.load_data.url).as_ref() == Some(&target_site)
++        {
++            return None;
++        }
++        Some(location.clone())
++    }
++
+     fn handle_navigation_redirect(&self, id: PipelineId, metadata: &Metadata) {
+         // TODO(mrobinson): This tries to accomplish some steps from
+         // <https://html.spec.whatwg.org/multipage/#process-a-navigate-fetch>, but it's
+@@ -3983,6 +4024,45 @@ impl ScriptThread {
+             return;
+         };
+ 
++        // MythBrowse (servo-script 0004): the constellation picked this pipeline's event loop
++        // from the URL the navigation started at. When an iframe navigation is redirected back
++        // to the site of the document that started it (an OAuth / SSO hop: parent A, frame
++        // B -> A), following the redirect here would create that document in B's event loop:
++        // its same-origin parent then gets a cross-origin WindowProxy (SecurityError) and
++        // BroadcastChannel messages between them are lost. Hand the redirect target back to
++        // the constellation as a replacing navigation instead, so the new pipeline is created
++        // in the event loop of its own site; the constellation discards this pending pipeline
++        // (servo-constellation 0001). At most one hop per chain: the new load's URL is
++        // same-site with its initiator.
++        if let Some(location) = Self::redirect_needs_new_event_loop(incomplete_load, metadata) {
++            let mut load_data = incomplete_load.load_data.clone();
++            load_data.url = location;
++            load_data.referrer = metadata
++                .referrer
++                .clone()
++                .map(Referrer::ReferrerUrl)
++                .unwrap_or(Referrer::NoReferrer);
++            load_data.referrer_policy = metadata.referrer_policy;
++            let target_snapshot_params = incomplete_load.target_snapshot_params;
++            let webview_id = incomplete_load.webview_id;
++            incomplete_loads.retain(|load| load.pipeline_id != id);
++            drop(incomplete_loads);
++            self.incomplete_parser_contexts
++                .0
++                .borrow_mut()
++                .retain(|(pipeline_id, _)| *pipeline_id != id);
++            let _ = self.senders.pipeline_to_constellation_sender.send((
++                webview_id,
++                id,
++                ScriptToConstellationMessage::LoadUrl(
++                    load_data,
++                    NavigationHistoryBehavior::Replace,
++                    target_snapshot_params,
++                ),
++            ));
++            return;
++        }
++
+         // Update the `url_list` of the incomplete load to track all redirects. This will be reflected
+         // in the new `RequestBuilder` as well.
+         incomplete_load.url_list.push(metadata.final_url.clone());

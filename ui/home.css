@@ -1,0 +1,725 @@
+/* SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing */
+/* New tab (home.html) and History & bookmarks (library.html) on the MythDesk design system
+   (design/tokens.css). Sizes, radii and shadows are MythDesk's (desktop/ui/style.css);
+   flexbox instead of grid and no backdrop-filter, for Servo 0.1.4. */
+
+html, body { height: 100%; }
+body { overflow: hidden; line-height: 1.4; }
+ul { list-style: none; margin: 0; padding: 0; }
+
+/* ---- status strip: top right (MythDesk .statusbar / .state) ----------------------------- */
+.statusbar { position: fixed; z-index: 5; top: 16px; right: 18px; display: flex; align-items: center; gap: 8px; }
+.state {
+  height: 40px; border-radius: 12px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
+  background: var(--glass); box-shadow: var(--shadow); font-size: 14px; font-weight: 600;
+}
+.state .sep { width: 1px; height: 14px; background: var(--line); }
+.state #state-text { font-weight: 500; color: var(--soft); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.state.ready .pulse { background: var(--ok); }
+
+/* ---- home: date and time on the left, cards on the right (MythDesk .lead / deck) -------- */
+.home {
+  position: fixed; z-index: 1; top: 72px; bottom: 104px; left: 0; right: 0;
+  display: flex; justify-content: center; align-items: center; padding: 0 56px;
+}
+.home-inner { width: 100%; max-width: 1000px; display: flex; align-items: center; justify-content: center; gap: 48px; }
+.lead { flex: 1 1 0; min-width: 0; padding: 0 8px 40px; }
+.nt-date { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--soft); }
+.big-time {
+  font-size: 96px; font-weight: 600; letter-spacing: -3px; line-height: 1; margin: 8px 0 0;
+  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.10);
+}
+.big-time .colon { display: inline-block; margin: 0 2px; opacity: 0.5; position: relative; top: -6px; }
+
+.side { flex: 0 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.card { padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow), var(--lift); }
+
+.links { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+.links a {
+  display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px; border-radius: 10px;
+  font-size: 14px; white-space: nowrap; overflow: hidden;
+}
+.links a:hover { background: var(--chip); }
+.links .t { flex: 1; min-width: 0; overflow: hidden; }
+.links .h { flex: none; color: var(--dim); font-size: 12.5px; }
+.links .empty { padding: 4px 8px 6px; color: var(--soft); font-size: 14px; }
+
+.card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 2px -8px 0; padding: 8px 8px 0; border-top: 1px solid var(--line);
+  color: var(--soft); font-size: 13px;
+}
+.card-foot:hover { color: var(--text); }
+
+/* ---- chat (MythDesk .messages / .msg) ----------------------------------------------------- */
+.messages {
+  display: none; position: fixed; z-index: 1; top: 72px; bottom: 104px; left: 0; right: 0;
+  overflow-y: auto; padding: 8px 56px 12px;
+}
+.messages .inner { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+body.chatting .home { display: none; }
+body.chatting .messages { display: block; }
+
+.msg-row { display: flex; align-items: flex-end; gap: 10px; }
+.msg-row.you { justify-content: flex-end; }
+.avatar {
+  flex: none; width: 24px; height: 24px; margin-bottom: 2px; border-radius: 50%;
+  background: var(--glass-hi); display: flex; align-items: center; justify-content: center;
+}
+.avatar .mark { font-size: 6px; }
+.msg {
+  max-width: 80%; padding: 12px 16px; border-radius: 18px; white-space: pre-wrap; line-height: 1.5;
+  font-size: 15px; box-shadow: var(--shadow);
+}
+.msg p { margin: 0; }
+.msg.you { background: var(--glass-you); color: #ffffff; border-bottom-right-radius: 6px; }
+.msg.myth { background: var(--glass); border-bottom-left-radius: 6px; }
+.msg.error { box-shadow: var(--shadow), inset 3px 0 0 var(--bad); }
+.msg .action {
+  display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; padding: 7px 12px;
+  border-radius: 11px; background: var(--chip); font-size: 13.5px; font-weight: 500; white-space: normal;
+}
+.msg .action:hover { background: var(--chip-hi); }
+
+.typing { display: flex; gap: 5px; padding: 4px 0; }
+.typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--soft); animation: bob 1.1s ease-in-out infinite; }
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes bob { 0%, 60%, 100% { opacity: 0.5; } 30% { opacity: 1; } }
+
+/* ---- bottom: the Myth composer (MythDesk .composer) -------------------------------------- */
+.bottom { position: fixed; z-index: 4; left: 0; right: 0; bottom: 20px; display: flex; justify-content: center; padding: 0 56px; }
+.composer {
+  width: 100%; max-width: 700px; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 16px;
+  border-radius: 18px; background: var(--glass-hi); box-shadow: var(--shadow), 0 12px 40px rgba(0, 0, 0, 0.12);
+  position: relative;
+}
+/* v0.4: the focus ring fades in by opacity (a box-shadow transition repainted the composer and
+   its blurred backdrop every frame). The deeper drop shadow is applied at once. */
+.composer::after {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: inherit;
+  box-shadow: 0 0 0 2px var(--accent-ring); opacity: 0; pointer-events: none; transition: opacity 0.12s ease;
+}
+.composer.focused { box-shadow: var(--shadow), 0 16px 44px rgba(0, 0, 0, 0.16); }
+.composer.focused::after { opacity: 1; }
+.cmd-ico { display: flex; }
+.composer input {
+  flex: 1; min-width: 0; height: 42px; padding: 0; border: 0; outline: none; background: rgba(0, 0, 0, 0);
+  color: var(--text); font-family: var(--font); font-size: 15.5px;
+}
+.composer .hint { font-size: 11px; }
+.send { width: 42px; height: 42px; flex: none; border-radius: 12px; background: var(--ink); display: flex; align-items: center; justify-content: center; }
+.send:hover { opacity: 0.9; }
+
+@media (max-width: 860px) { .lead { display: none; } .composer .hint { display: none; } }
+@media (max-height: 560px) { .big-time { font-size: 72px; } .home { top: 60px; } }
+
+/* ---- History & bookmarks (MythDesk "wide" views: Tasks, Activity) ------------------------ */
+.library-page { overflow-y: auto; }
+.library {
+  position: relative; z-index: 1; max-width: 920px; margin: 0 auto; padding: 28px 40px 40px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.library > header { display: flex; align-items: baseline; gap: 18px; padding: 4px 2px 0; }
+.library h1 { font-size: 28px; font-weight: 600; margin: 0; letter-spacing: -0.4px; }
+.panel { padding: 8px; }
+.panel-head { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 10px 0 12px; }
+.panel-head .w-title { flex: 1; }
+.panel-head .count { color: var(--dim); font-weight: 600; letter-spacing: 0; }
+.search-box {
+  display: flex; align-items: center; gap: 8px; width: 260px; height: 34px; padding: 0 10px;
+  background: var(--chip); border: 1px solid var(--line); border-radius: 12px;
+}
+.search-box input { flex: 1; min-width: 0; border: 0; outline: none; padding: 0; background: rgba(0, 0, 0, 0); color: var(--text); font-family: var(--font); font-size: 13.5px; }
+.search-box.focused { border-color: var(--accent); }
+.ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding-top: 0; padding-bottom: 0; line-height: 1; font-size: 13px; white-space: nowrap; }
+.ghost.armed { background: var(--bad); border-color: var(--bad); color: #ffffff; }
+
+.day { padding: 12px 12px 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--dim); }
+.entry { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 6px 0 12px; border-radius: 12px; }
+.entry:hover { background: var(--chip); }
+.entry .site { width: 22px; height: 22px; border-radius: 7px; font-size: 11px; line-height: 22px; }
+.entry a { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; overflow: hidden; white-space: nowrap; }
+.entry .t { font-size: 14px; }
+.entry .h { color: var(--dim); font-size: 12.5px; }
+.entry .meta { flex: none; color: var(--soft); font-size: 12.5px; white-space: nowrap; }
+.entry .remove { flex: none; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; opacity: 0; }
+.entry:hover .remove { opacity: 1; }
+.entry .remove:hover { background: var(--chip-hi); }
+.list-empty { padding: 10px 12px 14px; color: var(--soft); font-size: 14px; }
+
+/* ---- Myth conversation, week 2 (chat.js): replies, browser steps, approvals ------------- */
+.state { cursor: default; color: var(--text); font-family: var(--font); }
+.state:hover { background: var(--glass-hi); }
+.state.icon-only { width: 40px; padding: 0; justify-content: center; }
+.msg.myth { max-width: 86%; }
+.msg .body p { margin: 0 0 8px; }
+.msg .body p:last-child { margin-bottom: 0; }
+.msg .body p.h { font-weight: 600; }
+.msg .body ul, .msg .body ol { margin: 4px 0 8px; padding-left: 22px; }
+.msg .body li { margin: 2px 0; }
+.msg .body pre {
+  margin: 6px 0 8px; padding: 10px 12px; border-radius: 12px; background: var(--chip);
+  font-family: var(--font-mono); font-size: 13px; white-space: pre-wrap; overflow-x: auto;
+}
+.msg code { font-size: 0.88em; color: var(--text); }
+.msg a.link { text-decoration: underline; text-decoration-color: var(--dim); }
+.msg .body { white-space: normal; }
+
+.steps { display: flex; flex-direction: column; gap: 2px; margin: -2px 0 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.step { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: 13.5px; color: var(--soft); }
+.step-ico { display: flex; flex: none; width: 16px; justify-content: center; }
+.step.running .step-text { color: var(--text); }
+.step.error .step-text { color: var(--bad); }
+.notice { margin: 0 0 6px; color: var(--soft); font-size: 13.5px; }
+
+.approval { margin-top: 10px; padding: 12px 14px; border-radius: var(--r-md); background: var(--glass-hi); box-shadow: var(--shadow), 0 6px 18px rgba(10, 16, 40, 0.10); white-space: normal; }
+.approval p { margin: 6px 0 0; }
+.approval-action { font-weight: 600; }
+.approval-why { color: var(--soft); font-size: 13.5px; }
+.approval-url { color: var(--dim); font-size: 12.5px; word-break: break-all; }
+.approval-btns { display: flex; gap: 8px; margin-top: 12px; }
+.approval-btns .primary { padding: 8px 18px; }
+.approval-done { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--soft); font-size: 13px; }
+
+.err p { margin: 0; }
+.err .err-hint { margin-top: 4px; color: var(--soft); font-size: 13.5px; }
+.err .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.err .action { cursor: default; color: var(--text); font-family: var(--font); }
+
+/* Background work, above the composer. */
+.bottom { flex-direction: column; align-items: center; gap: 8px; }
+.background {
+  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 6px 0 12px; border-radius: 12px;
+  font-size: 13px; color: var(--soft); max-width: 700px;
+}
+.background #bg-text { white-space: nowrap; overflow: hidden; }
+.background a { padding: 4px 10px; border-radius: 8px; background: var(--chip); color: var(--text); font-weight: 600; }
+.background a:hover { background: var(--chip-hi); }
+.composer.running .send { background: var(--ink); }
+
+/* ---- model settings sheet ---------------------------------------------------------------- */
+.sheet-wrap {
+  position: fixed; z-index: 10; left: 0; right: 0; top: 0; bottom: 0; display: flex;
+  align-items: center; justify-content: center; padding: 24px; background: rgba(10, 16, 40, 0.18);
+}
+.sheet { width: 100%; max-width: 520px; padding: 18px 20px 16px; background: var(--glass-hi); box-shadow: var(--shadow), var(--lift); display: flex; flex-direction: column; gap: 12px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.sheet-head h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
+.tb-icon { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.tb-icon:hover { background: var(--chip); }
+.seg { display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--chip); }
+.seg-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; line-height: 1; height: 34px; border-radius: 9px; font-size: 13.5px; color: var(--soft); white-space: nowrap; }
+.seg-btn.on { background: var(--glass-hi); color: var(--text); font-weight: 600; box-shadow: var(--shadow); }
+.set-where { margin: -2px 2px 0; }
+.set-row { display: flex; flex-direction: column; gap: 6px; }
+.set-label { font-size: 12px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--soft); }
+.set-row .field { width: 100%; height: 38px; }
+.models { display: flex; flex-wrap: wrap; gap: 6px; }
+.model-chip { height: 26px; font-weight: 500; color: var(--text); }
+.model-chip.on { background: var(--ink); color: var(--ink-text); }
+.set-msg { margin: 0; min-height: 18px; font-size: 13px; color: var(--soft); }
+.set-msg.bad { color: var(--bad); }
+.sheet-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---- Tasks (tasks.html) ------------------------------------------------------------------ */
+.tasks #tasks { display: flex; flex-direction: column; gap: 14px; }
+.task { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.task-head { display: flex; align-items: center; gap: 10px; }
+.task-title { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; overflow: hidden; white-space: nowrap; }
+.chip.status.running, .chip.status.waiting { background: var(--ink); color: var(--ink-text); }
+.chip.status.error { color: var(--bad); }
+.task-head .ghost, .tab-acts .ghost { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.task-step { display: flex; align-items: center; gap: 8px; color: var(--soft); font-size: 13.5px; }
+.task-tabs { display: flex; flex-direction: column; gap: 10px; }
+.task-tab { display: flex; gap: 14px; align-items: flex-start; padding: 8px; border-radius: var(--r-md); background: var(--chip); }
+.thumb { position: relative; flex: none; width: 240px; height: 150px; border-radius: 12px; overflow: hidden; background: var(--glass-hi); box-shadow: var(--shadow); }
+.thumb img { display: block; width: 240px; height: 150px; }
+.thumb-empty { position: absolute; left: 0; right: 0; top: 64px; text-align: center; color: var(--dim); font-size: 13px; }
+.tab-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.tab-title { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.tab-url { color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.tab-acts { display: flex; gap: 8px; margin-top: 8px; }
+.quote { color: var(--text); }
+.peek-sheet { max-width: 920px; }
+.peek-acts { display: flex; align-items: center; gap: 8px; }
+.peek-acts .ghost { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.peek-url { margin: -6px 0 0; word-break: break-all; }
+.peek-frame { border-radius: 14px; overflow: hidden; background: var(--glass); box-shadow: var(--shadow); }
+.peek-frame img { display: block; width: 100%; }
+
+.motion-row .seg { max-width: 320px; }
+
+/* Sync panel (library page). */
+.sync-body { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.sync-form { display: flex; flex-direction: column; gap: 10px; max-width: 460px; }
+.sync-form p { margin: 0; }
+.sync-acts { display: flex; gap: 8px; align-items: center; }
+.sync-acts .primary { padding: 8px 18px; }
+.recovery { display: block; padding: 10px 12px; border-radius: 10px; background: var(--chip);
+  font: 600 14px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: 0.5px;
+  word-break: break-all; user-select: all; }
+.field.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+
+/* Liquid glass: the settings sheet's tint is light (the shell blurs the sky behind it, not
+   this page's own cards), so the home content fades out while the sheet is open instead of
+   showing through it. */
+html[data-glass="blur"] main.home, html[data-glass="blur"] .messages { transition: opacity 0.2s ease; }
+/* While the settings sheet is open the page blurs its own chat behind it: the shell's blur
+   only has the sky behind an internal page, not the page's own content, so the page does that
+   part itself (Servo 0.1.4 supports `filter`). The chat then shows through the now clear sheet
+   (--glass-hi = the strong tint, B .30) as soft shapes, as in the prototype; outside the sheet
+   it reads as a normal modal backdrop under the light scrim. The radius and saturation follow
+   the Transparency setting (24 px x --lg-blur-k: 12 px at the default). A filtered subtree
+   reports no glass of its own (motion.js). Reduce transparency: no blur, the sheet is solid. */
+html[data-glass="blur"] body.sheet-open main.home, html[data-glass="blur"] body.sheet-open .messages,
+html[data-glass="blur"] body.sheet-open .sidebar {
+  filter: blur(calc(24px * var(--lg-blur-k))) saturate(var(--lg-sat)); opacity: 1;
+}
+html[data-transparency="reduced"] body.sheet-open main.home, html[data-transparency="reduced"] body.sheet-open .messages,
+html[data-transparency="reduced"] body.sheet-open .sidebar { filter: none; }
+
+/* ---- approved liquid-glass design (flat revision) ------------------------
+   The new tab's conversation, status pill, composer and model sheet as in the prototype:
+   Myth's bubbles are glass with a small "Myth" label, yours are solid navy; a "Today" chip; a
+   round composer with the model chip; the sheet is a strong glass panel with flat controls. */
+:root { --navy: var(--ink); --navy-text: var(--ink-text); }
+[data-tone="dark"] { --navy: #3f63c4; --navy-text: #ffffff; }
+[data-tone="light"] { --navy: #16203a; --navy-text: #ffffff; }
+.statusbar { top: 8px; right: 18px; }
+.state { height: 36px; border-radius: 18px; gap: 8px; padding: 0 12px 0 14px; font-size: 13px; font-weight: 600; }
+.state.icon-only { width: 36px; padding: 0; }
+.state .pulse { width: 8px; height: 8px; }
+
+.messages { top: 0; bottom: 84px; padding: 64px 20px 20px; }
+.messages .inner { max-width: 720px; min-height: 100%; gap: 14px; justify-content: flex-end; }
+.day-sep {
+  align-self: center; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;
+  letter-spacing: 0.4px; color: var(--soft); background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.msg-row { gap: 0; }
+.msg { max-width: 82%; padding: 11px 15px; border-radius: 20px; font-size: 14.5px; line-height: 1.5; }
+.msg.myth { max-width: 82%; border-bottom-left-radius: 7px; }
+.msg.you { background: var(--navy); color: var(--navy-text); border-bottom-right-radius: 7px; box-shadow: none; }
+.msg .who { display: flex; align-items: center; gap: 7px; margin-bottom: 4px; font-size: 12px; font-weight: 700; color: var(--soft); white-space: nowrap; }
+.msg .who .mark { font-size: 7px; }
+.msg.myth .body p { margin: 0 0 8px; }
+.msg.myth .body p:last-child { margin-bottom: 0; }
+.avatar { display: none; }
+
+.bottom { bottom: 22px; padding: 0 20px; }
+.composer {
+  max-width: 720px; gap: 8px; padding: 8px 8px 8px 10px; border-radius: 26px;
+  background: var(--glass); box-shadow: var(--shadow);
+}
+.composer.focused { box-shadow: var(--shadow); }
+.composer::after { display: none; }
+.composer input { height: 40px; padding: 0 4px; font-size: 15px; }
+.composer input::placeholder { color: var(--dim); }
+.model-pill {
+  flex: none; height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 12px; border-radius: 17px;
+  font-size: 12.5px; font-weight: 600; color: var(--soft); background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+  white-space: nowrap;
+}
+.model-pill:hover { background: var(--btn-glass-hi); }
+.send { width: 40px; height: 40px; border-radius: 20px; background: var(--navy); }
+.composer.running .send { background: var(--navy); }
+.background { border-radius: 17px; }
+
+/* Model sheet (prototype #sheet: 468 px, radius 26, strong glass + hairline + float shadow,
+   scrim --scrim). Labels in buttons are centred with line-height = height: Servo 0.1.4 does
+   not centre a button's content vertically the way Chromium does. */
+.sheet-wrap { background: var(--scrim); }
+/* Scrim as in the prototype: in 220 ms ease (180 ms ease with Reduce Motion, an opacity fade
+   either way), out 180 ms linear. */
+.sheet-wrap.scrim-in { animation: mv-op-in 0.22s ease both; }
+.sheet-wrap.scrim-out { animation: mv-op-out 0.18s linear both; }
+html[data-motion="reduced"] .sheet-wrap.scrim-in { animation: mv-op-in 0.18s ease both !important; }
+html[data-motion="reduced"] .sheet-wrap.scrim-out { animation: mv-op-out 0.18s linear both !important; }
+html[data-motion="off"] .sheet-wrap.scrim-in, html[data-motion="off"] .sheet-wrap.scrim-out { animation: none; }
+.sheet {
+  max-width: 468px; padding: 0 14px 16px; border-radius: 26px; gap: 0; outline: none;
+  max-height: calc(100% - 28px); overflow-y: auto;
+}
+.sheet-head { padding: 14px 0 8px 4px; margin-right: -2px; }
+.sheet-head h2 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; letter-spacing: 0; line-height: 32px; }
+.tb-icon { border-radius: 16px; }
+.sheet .seg { margin-top: 4px; padding: 3px; gap: 2px; border-radius: 18px; background: var(--ctl-track); }
+.sheet .seg-btn {
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1; height: 32px; padding: 0 12px; border-radius: 15px;
+  font-size: 13px; font-weight: 600; text-align: center; white-space: nowrap;
+}
+.sheet .seg-btn.on { box-shadow: inset 0 0 0 var(--hair) var(--seg-rim); background: var(--seg-sel); color: var(--text); }
+.sheet .seg-pill { top: 3px; bottom: 3px; border-radius: 15px; }
+.sheet .set-row { gap: 6px; margin-top: 14px; }
+.sheet .set-label { display: block; font-size: 12.5px; font-weight: 600; letter-spacing: 0; text-transform: none; padding-left: 4px; color: var(--soft); line-height: 1.4; }
+/* Labels directly on the (now clearer) glass body: main text at .85 (NOTES section 4). */
+html[data-glass="blur"] .sheet .set-label, html[data-glass="blur"] .w-title { color: var(--label); }
+.sheet .inp {
+  display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 12px; border-radius: 14px;
+  background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.sheet .inp input {
+  flex: 1; min-width: 0; height: 40px; line-height: 40px; padding: 0; border: 0; outline: none;
+  background: rgba(0, 0, 0, 0); color: var(--text); font-family: var(--font); font-size: 14px;
+}
+/* Focus, on brand: the hairline darkens and the fill lifts a touch (no purple ring). */
+.sheet .inp.focused { background: var(--btn-glass-hi); box-shadow: inset 0 0 0 1px var(--focus-rim); }
+.sheet { --focus-rim: rgba(22, 32, 58, 0.30); --focus-ring: rgba(22, 32, 58, 0.22); }
+[data-tone="dark"] .sheet { --focus-rim: rgba(255, 255, 255, 0.36); --focus-ring: rgba(255, 255, 255, 0.30); }
+.sheet button:focus { outline: none; }
+.sheet button:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--focus-rim), 0 0 0 2px var(--focus-ring); }
+.sheet .key-note { padding-left: 4px; }
+.check-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; min-height: 36px; }
+.pill-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 40px; line-height: 1; padding: 0 18px; border-radius: 20px; white-space: nowrap;
+  font-size: 14px; font-weight: 600; color: var(--text);
+  background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.pill-btn > span { line-height: 1; display: inline-flex; align-items: center; }
+.pill-btn:hover { background: var(--btn-glass-hi); }
+.pill-btn.sm { height: 34px; line-height: 1; padding: 0 13px; border-radius: 17px; font-size: 13px; }
+.pill-btn.navy { background: var(--navy); color: var(--navy-text); box-shadow: none; }
+.pill-btn.navy:hover { background: var(--navy); opacity: 0.92; }
+.pill-btn[disabled] { opacity: 0.6; }
+.check-row .set-msg { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-weight: 600; line-height: 1.35; }
+.set-msg .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.sheet .models {
+  display: block; padding: 4px; border-radius: 18px; max-height: 214px; overflow-y: auto;
+  background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.mrow {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 10px; border-radius: 14px;
+  text-align: left; color: var(--text); font-family: var(--font);
+}
+.mrow:hover { background: var(--chip); }
+.mrow .mn { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; font-weight: 600; font-size: 13.5px; line-height: 40px; }
+.mrow .mi { flex: none; font-size: 12px; color: var(--soft); line-height: 40px; }
+.radio {
+  position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--dim);
+}
+.radio i {
+  position: absolute; left: 0; top: 0; width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: var(--navy);
+  transform: scale(0); transition: transform var(--d-bouncy, 480ms) var(--spr-bouncy, cubic-bezier(0.25, 1.15, 0.45, 1));
+}
+.mrow[aria-checked="true"] .radio { box-shadow: inset 0 0 0 1.5px var(--navy); }
+.mrow[aria-checked="true"] .radio i { transform: none; }
+.setrow { display: flex; align-items: center; gap: 12px; padding: 12px 4px 2px; font-size: 13.5px; }
+/* Appearance: the Transparency slider (live preview; Save keeps it, Cancel puts it back) and
+   Reduce transparency. */
+.sheet .appear { margin-top: 16px; }
+.appear-box { padding: 10px 12px 8px; border-radius: 18px; background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.appear-line { display: flex; align-items: center; justify-content: space-between; height: 22px; padding: 0 2px; font-size: 13.5px; font-weight: 600; }
+.appear-line .tr-val { font-size: 12.5px; font-weight: 600; color: var(--soft); }
+.appear-ends { display: flex; justify-content: space-between; padding: 0 2px; font-size: 11.5px; color: var(--soft); }
+.appear-box .slider { margin: 2px -2px 0; }
+.appear .setrow { padding-top: 10px; }
+.setrow > span { flex: 1; }
+.sw[disabled] { opacity: 1; }
+.sheet-foot { display: flex; gap: 8px; padding-top: 12px; margin-top: 4px; }
+.sheet-foot .pill-btn { flex: 1 1 0; }
+.model-chip { background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.model-chip.on { background: var(--navy); color: var(--navy-text); box-shadow: none; }
+
+/* Myth's approval inside a reply: a flat glass card, no extra shadow. */
+.approval { box-shadow: var(--shadow); border-radius: 18px; }
+.approval-btns .primary { background: var(--navy); color: var(--navy-text); border-radius: 17px; }
+.approval-btns .ghost { border: 0; background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); border-radius: 17px; color: var(--text); }
+
+/* Tasks (tasks.html) in the approved look: flat glass cards, rounder, buttons as flat round
+   translucent pills, the status chip in navy. */
+.tasks .task { border-radius: 22px; padding: 14px; gap: 12px; }
+.tasks .task-title { font-size: 14.5px; line-height: 1.3; }
+.tasks .task-tab { border-radius: 18px; padding: 10px; background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.tasks .thumb { border-radius: 12px; box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.10); }
+.tasks .ghost, .peek-acts .ghost {
+  height: 34px; padding: 0 13px; border: 0; border-radius: 17px; justify-content: center;
+  color: var(--text); background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.tasks .ghost:hover, .peek-acts .ghost:hover { background: var(--btn-glass-hi); }
+.chip.status.running, .chip.status.waiting { background: var(--navy); color: var(--navy-text); border-radius: 10px; }
+.tasks .task-step { color: var(--text); font-weight: 600; font-size: 13px; }
+.peek-sheet { border-radius: 26px; }
+
+/* ---- chat history: glass sidebar on the new tab (chatlist.js) ------------------------------
+   A floating flat-glass panel on the left (data-glass="p": the shell blurs the sky under it).
+   It opens from its button with motion.js pop/unpop (springs; fades only with Reduce Motion,
+   nothing with motion off). Titles are cut by JMMotion.ellipsis (no text-overflow in Servo). */
+.statusbar-left { position: fixed; z-index: 5; top: 8px; left: 18px; display: flex; align-items: center; gap: 8px; }
+.state.on { background: var(--btn-glass-hi); }
+.sidebar {
+  position: fixed; z-index: 4; top: 56px; bottom: 22px; left: 14px; width: 276px;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 8px 8px;
+  border-radius: 24px; background: var(--glass); box-shadow: var(--shadow);
+  transform-origin: 30px 0;
+}
+.sidebar[hidden] { display: none; }
+.side-head { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 2px 0 10px; }
+.side-head .w-title { flex: 1; }
+.side-new {
+  display: flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px 0 9px; border-radius: 15px;
+  font-size: 12.5px; font-weight: 600; color: var(--text); background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.side-new:hover { background: var(--btn-glass-hi); }
+.side-head .tb-icon { width: 30px; height: 30px; border-radius: 15px; }
+.side-search { width: auto; height: 34px; margin: 0 2px; border: 0; border-radius: 17px; background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.side-search.focused { box-shadow: inset 0 0 0 var(--hair) var(--lg-rim), 0 0 0 3px var(--accent-ring); }
+.side-private { display: flex; align-items: center; gap: 6px; margin: 0 6px; font-size: 12.5px; color: var(--soft); }
+.side-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 2px; }
+.side-foot { margin: 0 4px; padding: 8px 8px 2px; border-top: 1px solid var(--line); }
+/* Room for the open sidebar when the window is not wide enough for it beside the chat. */
+@media (max-width: 1700px) { body.side-open main.home { left: 290px; padding-left: 24px; } }
+/* With the sidebar open the chat column and composer are centred in the space to its right
+   (not the whole window), so the right side never sits empty; closed, they centre in the
+   window. On wide windows the column grows to 760 px. */
+body.side-open .messages, body.side-open .bottom { left: 290px; }
+body.side-open .messages { padding-left: 20px; }
+@media (min-width: 1500px) {
+  .messages .inner, .composer, .background { max-width: 760px; }
+}
+@media (max-width: 760px) { .sidebar { width: auto; right: 14px; } body.side-open .messages, body.side-open .bottom, body.side-open main.home { left: 0; } }
+
+/* Grouped chat list (sidebar and History > Chats). */
+.cl-group + .cl-group { margin-top: 6px; }
+.cl-label { padding: 8px 10px 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--dim); }
+.cl-items { display: flex; flex-direction: column; gap: 1px; }
+.cl-item { position: relative; display: flex; align-items: center; border-radius: 13px; }
+.cl-item:hover { background: var(--chip); }
+.cl-item.on { background: var(--btn-glass-hi); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.cl-item.cl-gone { opacity: 0.35; transition: opacity 0.2s ease; }
+.cl-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 6px 0 10px;
+  border-radius: 13px; color: var(--text); font-family: var(--font); text-align: left; background: none;
+}
+.cl-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 13.5px; }
+.cl-item.on .cl-title { font-weight: 600; }
+.cl-meta { flex: none; font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+.cl-live { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.cl-acts { display: none; flex: none; gap: 2px; padding-right: 4px; }
+.cl-item:hover .cl-acts, .cl-item:focus-within .cl-acts { display: flex; }
+.cl-item:hover .cl-meta { display: none; }
+.cl-item.pinned .cl-acts .cl-act.on { display: flex; }
+.cl-act { width: 26px; height: 26px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+.cl-act:hover { background: var(--chip-hi); }
+.cl-act.armed { background: var(--bad); }
+.cl-rename { flex: 1; min-width: 0; height: 32px; margin: 2px 4px; padding: 0 10px; border-radius: 11px; font-size: 13.5px; }
+.cl-empty { margin: 10px 10px; color: var(--soft); font-size: 13.5px; line-height: 1.45; }
+
+/* History page: Pages / Chats tabs sharing one search box; chat settings. */
+.lib-tabs { max-width: 260px; flex: none; }
+.lib-tabs .seg-btn { padding: 0 14px; }
+.chats-list { padding: 0 4px 6px; }
+.chats-list .cl-open { height: 42px; }
+.chats-list .cl-title { font-size: 14px; }
+.chats-list .cl-meta { font-size: 12.5px; }
+.chat-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 4px 12px 12px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+.chat-settings .set-label { white-space: nowrap; }
+.chat-settings .seg { width: 270px; }
+.chat-settings .soft { flex: 1 1 200px; }
+.entry .myth-link { flex: none; display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 12px; font-size: 12px; font-weight: 600; color: var(--text); background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); white-space: nowrap; }
+.entry .myth-link .mark { font-size: 5px; }
+.entry .myth-link:hover { background: var(--btn-glass-hi); }
+.sync-chats { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+/* The model sheet softens and dims the sidebar like the rest of the page behind it. */
+html[data-glass="blur"] .sidebar { transition: opacity 0.2s ease; }
+/* (blurred with the chat while the settings sheet is open: see the sheet-open rule above) */
+/* Sidebar / New chat buttons in the prototype's toolbar style (.nav): quiet 36 px icon
+   buttons on the sky, no glass disc (the glass is kept for the Myth status pill). */
+.statusbar-left { gap: 2px; }
+.statusbar-left .state.icon-only {
+  width: 36px; height: 36px; border-radius: 12px; padding: 0; background: rgba(0, 0, 0, 0); box-shadow: none;
+}
+.statusbar-left .state.icon-only:hover { background: var(--chip); }
+.statusbar-left .state.icon-only.on { background: var(--chip-hi); }
+
+/* Settings page (library.html, toolbar gear): General = model + Motion (+ Keep chats). */
+.gen-body { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; }
+.gen-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; min-height: 40px; }
+.gen-label { flex: none; width: 96px; font-size: 13.5px; font-weight: 600; }
+.gen-val { flex: 1 1 160px; min-width: 0; font-size: 13.5px; }
+.gen-seg { flex: none; width: 300px; }
+.gen-seg .seg-btn { display: inline-flex; align-items: center; justify-content: center; line-height: 1; height: 32px; text-align: center; }
+a.pill-btn { text-decoration: none; }
+
+/* Settings > Privacy & site settings (ui/sitesettings.js) and the page-source view. */
+.ss-list { display: flex; flex-direction: column; gap: 10px; padding: 4px 20px 16px; }
+.ss-site { display: block; padding: 10px 14px; border-radius: var(--r-md); background: var(--chip); }
+.ss-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.ss-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.ss-feat { color: var(--soft); font-size: 13px; }
+.ss-seg .seg-btn { padding: 4px 12px; font-size: 12px; }
+.ss-empty { padding: 0 20px 16px; margin: 0; }
+.ss-empty[hidden] { display: none; }
+.source-view { margin: 0; padding: 14px 16px; max-height: 70vh; overflow: auto; white-space: pre-wrap;
+  overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--text); }
+
+/* ---- first-run welcome (onboarding.js) -----------------------------------------------------
+   The Model sheet's strong glass panel, a little wider, one step at a time. Step dots are the
+   three Myth colours (then navy), the step you are on is a longer pill. */
+.welcome { max-width: 500px; }
+.wl-head { justify-content: space-between; padding: 14px 4px 4px; }
+.wl-steps { display: flex; align-items: center; gap: 6px; height: 32px; }
+.wl-steps i { display: block; width: 7px; height: 7px; border-radius: 4px; background: var(--chip-hi);
+  /* v0.4: the current step's longer pill grows by scaleX (from the left), not width. */
+  transform-origin: 0 50%; transition: transform 0.28s var(--ease-out, ease); }
+.wl-steps i.done { background: var(--dim); }
+.wl-steps i.on { width: 7px; margin-right: 13px; transform: scaleX(2.857); background: var(--navy); }
+.wl-steps i.on:nth-child(1) { background: var(--dot-1); }
+.wl-steps i.on:nth-child(2) { background: var(--dot-2); }
+.wl-steps i.on:nth-child(3) { background: var(--dot-3); }
+.wl-skip { display: inline-flex; align-items: center; justify-content: center; line-height: 1; height: 32px; padding: 0 12px; border-radius: 16px; font-size: 13px; font-weight: 600; color: var(--soft); }
+.wl-skip:hover { background: var(--chip); color: var(--text); }
+.wl-step { display: flex; flex-direction: column; padding: 2px 6px 0; }
+.wl-step[hidden] { display: none; }
+.wl-logo { display: block; width: 64px; height: 64px; margin: 6px 0 14px; border-radius: 15px; box-shadow: 0 6px 18px rgba(10, 16, 40, 0.18); }
+.wl-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.2px; line-height: 1.25; color: var(--text); }
+.wl-lead { margin: 8px 0 0; font-size: 14px; line-height: 1.5; color: var(--soft); }
+html[data-glass="blur"] .wl-lead { color: var(--label); }
+.wl-points { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wl-points li { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: 16px; background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.wl-points li > span { flex: none; margin-top: 1px; }
+.wl-points div, .wl-card div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wl-points b, .wl-card b, .wl-choice b { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.wl-points div > span, .wl-card div > span { font-size: 13px; line-height: 1.45; color: var(--soft); }
+.wl-choices { display: flex; gap: 10px; margin-top: 16px; }
+.wl-choice {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 14px; border-radius: 18px; text-align: left; font-family: var(--font); color: var(--text);
+  background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+  transition: var(--press-t);
+}
+.wl-choice:hover { background: var(--btn-glass-hi); }
+.wl-choice.on { box-shadow: inset 0 0 0 1.5px var(--navy); background: var(--btn-glass-hi); }
+.wl-choice > span:last-child { font-size: 12.5px; line-height: 1.45; color: var(--soft); white-space: normal; }
+.wl-note { display: flex; align-items: center; gap: 8px; margin: 14px 2px 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.wl-note[hidden] { display: none; }
+.wl-note .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.wl-card { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 12px 12px 14px; border-radius: 18px; background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.welcome .set-row { margin-top: 16px; }
+.welcome .sheet-foot { margin-top: 18px; }
+.welcome #wl-back[hidden] { display: none; }
+/* While it is open the page behind blurs exactly as for the Model sheet (body.sheet-open). */
+
+/* ---- Settings (v0.4, library.html + settings.js) ------------------------------------------- */
+/* v0.4.2: one tidy line. A segmented rail (glass track, equal-height items, centred text);
+   it never wraps and scrolls sideways when narrow. Focus ring only for keyboard focus
+   (html.kbd, set by settings.js: Servo's :focus-visible also matches mouse focus). */
+.set-nav {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 1px; align-self: stretch; max-width: 100%;
+  height: 38px; padding: 4px; border-radius: 19px; box-sizing: border-box;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim);
+}
+.set-nav::-webkit-scrollbar { display: none; }
+.set-nav a {
+  flex: 1 0 auto; display: flex; align-items: center; justify-content: center; height: 30px; padding: 0 9px;
+  border-radius: 15px; line-height: 1; white-space: nowrap; text-decoration: none;
+  font-size: 13px; font-weight: 600; color: var(--soft); background: rgba(0, 0, 0, 0);
+  outline: none;
+}
+.set-nav a:hover { color: var(--text); background: var(--btn-glass-hi); }
+.set-nav a.on { color: var(--text); background: var(--btn-glass-hi); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); }
+.set-nav a:focus { outline: none; }
+html.kbd .set-nav a:focus { box-shadow: inset 0 0 0 1px var(--focus-rim), 0 0 0 2px var(--focus-ring); }
+/* The same rule for every control on the Settings page: no dotted UA outline on click. */
+.library-page { --focus-rim: rgba(22, 32, 58, 0.30); --focus-ring: rgba(22, 32, 58, 0.22); }
+[data-tone="dark"] .library-page { --focus-rim: rgba(255, 255, 255, 0.36); --focus-ring: rgba(255, 255, 255, 0.30); }
+.library-page a:focus, .library-page button:focus, .library-page [tabindex]:focus { outline: none; }
+html.kbd .library-page .pill-btn:focus, html.kbd .library-page .seg-btn:focus,
+html.kbd .library-page .tab:focus { box-shadow: inset 0 0 0 1px var(--focus-rim), 0 0 0 2px var(--focus-ring); }
+.panel { scroll-margin-top: 16px; }
+.gen-label { width: 160px; white-space: nowrap; }
+#dl-msg:empty { display: none; }
+#ua-seg { width: auto; }
+#ua-seg .seg-btn { flex: none; padding: 0 14px; }
+.gen-row .dd { flex: none; }
+.gen-row .seg.gen-seg { flex: none; }
+.sub-head { height: 36px; }
+.tr-box { flex: 1 1 260px; max-width: 420px; min-width: 200px; }
+.tr-box .appear-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--soft); padding: 0 4px; }
+.mono-path { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.dl-folder { color: var(--text); }
+.cbd {
+  display: flex; flex-direction: column; gap: 2px; margin: 0 0 4px 176px; padding: 8px 10px 10px; border-radius: 16px;
+  background: var(--btn-glass); box-shadow: inset 0 0 0 var(--hair) var(--lg-rim); transform-origin: top left;
+}
+.cbd-row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 4px 4px; font-size: 13.5px; }
+.cbd-row > span { display: flex; flex-direction: column; gap: 2px; }
+.cbd-acts { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 8px; }
+.cbd-acts .set-msg { flex: 1; min-height: 0; }
+/* Settings > Cookies and site data (v0.4.2, ui/cookies.js). */
+.ck-tag { flex: none; padding: 3px 10px; border-radius: 10px; background: var(--chip); color: var(--soft); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ck-note { margin: 0 0 0 176px; max-width: 640px; line-height: 1.45; }
+.ck-note[hidden] { display: none; }
+.ck-tools { min-height: 0; }
+.ck-search { flex: 0 1 320px; min-width: 200px; margin-left: 176px; }
+.ck-tools .set-msg { flex: 1 1 160px; min-height: 0; }
+.ck-sites { list-style: none; margin: 0; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+.ck-site { border-radius: var(--r-md); background: var(--chip); }
+.ck-head { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 8px 4px 4px; }
+.ck-tog { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px; border: 0; border-radius: 10px; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.ck-tog:hover { background: var(--btn-glass-hi); }
+.ck-chev { flex: none; display: inline-flex; transform: rotate(-90deg); transition: transform 0.16s ease; }
+.ck-site.open .ck-chev { transform: none; }
+.ck-name { min-width: 0; display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+.ck-name b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-seg { flex: none; }
+.ck-seg .seg-btn { flex: none; height: 30px; padding: 0 11px; font-size: 12.5px; }
+.ck-body { padding: 0 12px 10px 38px; }
+.ck-none { padding: 4px 0 6px; }
+.ck-table { display: flex; flex-direction: column; border-radius: 10px; background: var(--btn-glass); overflow: hidden; }
+.ck-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) 112px 150px 60px 30px; align-items: center; gap: 10px; min-height: 34px; padding: 0 4px 0 12px; font-size: 12.5px; }
+.ck-row + .ck-row { box-shadow: inset 0 var(--hair) 0 var(--lg-rim); }
+.ck-th { min-height: 28px; color: var(--soft); font-size: 11.5px; font-weight: 600; }
+.ck-cname { font-family: var(--font-mono); font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-dom { color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ck-exp { color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ck-flags { display: flex; flex-wrap: wrap; gap: 4px; }
+.ck-flag { padding: 1px 6px; border-radius: 6px; background: var(--chip); color: var(--soft); font-size: 11px; font-style: normal; white-space: nowrap; }
+.ck-size { color: var(--soft); text-align: right; white-space: nowrap; }
+.ck-x { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 14px; background: none; cursor: pointer; }
+.ck-x:hover { background: var(--chip-hi, var(--chip)); }
+.ck-fine { margin: 6px 0 0; }
+html.kbd .library-page .ck-tog:focus, html.kbd .library-page .ck-x:focus { box-shadow: inset 0 0 0 1px var(--focus-rim), 0 0 0 2px var(--focus-ring); }
+@media (max-width: 860px) {
+  .ck-head { flex-wrap: wrap; }
+  .ck-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px; }
+  .ck-row .ck-exp, .ck-row .ck-flags, .ck-row .ck-size { display: none; }
+  .ck-body { padding-left: 12px; }
+  .ck-th { display: none; }
+}
+.upd-text { display: inline-flex; align-items: center; gap: 8px; }
+.upd-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.upd-dot.ok { background: var(--ok); }
+.upd-dot.new { background: var(--warn); }
+.upd-dot.bad { background: var(--bad); }
+.upd-bar { height: 4px; margin: -4px 0 4px 176px; border-radius: 2px; background: var(--ctl-track); overflow: hidden; }
+.upd-bar b { display: block; height: 100%; width: 100%; background: var(--navy, var(--ink)); transform-origin: 0 50%; transform: scaleX(0); transition: transform 0.3s ease; }
+.lic p { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: var(--soft); }
+.lic a, .lic-row a { color: var(--text); text-decoration: underline; text-decoration-color: var(--dim); }
+.links-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.about-logo { display: block; border-radius: 4px; }
+#myth-panel .w-title .mark { font-size: 6px; }
+@media (max-width: 720px) { .cbd, .upd-bar, .ck-note, .ck-search { margin-left: 0; } }
+
+/* History tabs (v0.4): the lists crossfade (opacity / transform only). */
+.lib-out { opacity: 0; transition: opacity 100ms linear; }
+.lib-in { animation: lib-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes lib-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+html[data-motion="reduced"] .lib-in { animation: mv-fade 0.16s ease both !important; }
+html[data-motion="off"] .lib-in, html[data-motion="off"] .lib-out { animation: none !important; transition: none !important; opacity: 1; }
+
+/* Update badge on the new tab page (home.js updBadge). */
+.upd-toast {
+  position: fixed; right: 18px; top: 56px; z-index: 30; display: flex; align-items: center; gap: 4px;
+  height: 36px; padding: 0 6px 0 14px; border-radius: 18px; font-size: 13px; font-weight: 600;
+}
+.upd-toast::before { content: ""; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--warn); }
+.upd-toast a { color: var(--text); text-decoration: none; }
+.upd-toast a:hover { text-decoration: underline; }
+.upd-x { width: 26px; height: 26px; border: 0; border-radius: 13px; background: none; color: var(--soft); font-size: 16px; line-height: 1; cursor: pointer; }
+.upd-x:hover { background: var(--chip); color: var(--text); }

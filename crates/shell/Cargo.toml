@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-shell"
+description = "MythBrowse desktop browser shell (window, tabs, address bar)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "mythbrowse"
+path = "src/main.rs"
+
+[features]
+# Cloud account + end-to-end encrypted sync (Appwrite). OFF by default, so the Microsoft Store
+# preview has no Sync panel, no sign-in and no sync traffic; browsing, Myth (BYOK / Ollama) and
+# the compat ruleset download are unaffected. Turn it back on with `--features cloud_sync`.
+default = []
+cloud_sync = ["mythbrowse-engine/cloud_sync"]
+# Official JustMyth builds only: set by the private overlay that adds the proprietary Myth
+# agent host in place of the chat-only src/ai_host.rs. Fails to build without that overlay.
+agent = []
+
+[dependencies]
+mythbrowse-engine = { workspace = true, features = ["servo"] }
+mythbrowse-blocker.workspace = true
+mythbrowse-ai.workspace = true
+mythbrowse-storage.workspace = true
+mythbrowse-compat.workspace = true
+mythbrowse-sync.workspace = true
+mythbrowse-files.workspace = true
+# Settings > About: updates from the public repository's GitHub Releases (settings_host.rs).
+mythbrowse-update.workspace = true
+# `CookieSource` for `SiteDataManager::cookies_for_url` (downloads send the page's cookies);
+# Servo 0.1.4 does not re-export it. Already in Cargo.lock.
+net_traits = { package = "servo-net-traits", version = "0.1.4" }
+# Builds the delete-one / block control cookies for Servo's `SiteDataManager` (cookies_host.rs);
+# the version Servo 0.1.4 uses (already in Cargo.lock).
+cookie = "0.18"
+# v0.4.2 `persist_cookies`: installs the cookie-jar encryption (vendored patch servo-net-0003,
+# `net::mythbrowse_cookies::set_jar_codec`) before Servo starts. Already in Cargo.lock.
+net = { package = "servo-net", version = "0.1.4" }
+mythbrowse-passwords.workspace = true
+mythbrowse-notify.workspace = true
+zeroize = "1.8"
+serde_json.workspace = true
+http.workspace = true
+url.workspace = true
+winit.workspace = true
+rustls.workspace = true
+log.workspace = true
+# Same version Servo 0.1.4 composes with (`RenderingContext::glow_gl_api`): rounds the page
+# card's corners (see src/compose.rs).
+glow = "0.16"
+# Agent-tab screenshots for the Tasks panel (both already in the lock file via Servo).
+png = "0.17"
+# Address-bar web suggestions (same version / features as mythbrowse-ai; already locked).
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+base64 = "0.22"
+
+[target.'cfg(unix)'.dependencies]
+# raise_fd_limit(): RLIMIT_NOFILE soft limit -> hard limit at start-up.
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Console attach, std-handle redirection, MessageBox, LoadLibrary, the "Transparency effects"
+# registry value (already in Cargo.lock).
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging",
+    # Snap Layouts on the custom maximize button (src/snap.rs).
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }

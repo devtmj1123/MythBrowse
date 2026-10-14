@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+# MythBrowse Phase 0 built-in blocklist (tiny seed list; real lists arrive with the full engine).
+# Rules block the domain and all of its subdomains. Main-frame navigations are never blocked.
+||doubleclick.net^
+||googlesyndication.com^
+||googleadservices.com^
+||google-analytics.com^
+||adservice.google.com^
+||scorecardresearch.com^
+||adnxs.com^
+||taboola.com^
+||outbrain.com^
+||criteo.com^
+||criteo.net^
+||amazon-adsystem.com^
+||ads-twitter.com^
+||hotjar.com^

@@ -1,0 +1,198 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 1356d04..049a20e 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -234,6 +234,9 @@ version = "0.6.2"
+ [dependencies.serde]
+ version = "1.0.228"
+ 
++[dependencies.serde_json]
++version = "1"
++
+ [dependencies.servo-base]
+ version = "=0.1.4"
+ 
+diff --git a/mythbrowse_cookies.rs b/mythbrowse_cookies.rs
+index c1d89fd..2031251 100644
+--- a/mythbrowse_cookies.rs
++++ b/mythbrowse_cookies.rs
+@@ -22,8 +22,20 @@
+ //!
+ //! Third-party cookie blocking is not here: the cookie set / read paths (HTTP responses,
+ //! `document.cookie`, CookieStore) do not know the top-level site of the request.
++//!
++//! Patch servo-net-0003 (sealed cookie jar): with a `config_dir`, stock Servo reads and
++//! writes `cookie_jar.json` and `auth_cache.json` (HTTP auth credentials) as plain JSON. When
++//! the embedder installs a [`JarCodec`] before the resource threads start, the jar is kept
++//! sealed instead, in [`SEALED_JAR_FILE`] (the codec's `seal` / `open`, e.g. AES-GCM with a
++//! key in the OS key store), written atomically (temp file + rename, 0600 on Unix), and
++//! `auth_cache.json` is neither read nor written (HTTP auth stays in memory). The HSTS list
++//! is still kept as plain JSON (it holds host names only).
++
++use std::path::Path;
++use std::sync::{Arc, RwLock};
+ 
+-use std::sync::RwLock;
++use serde::Serialize;
++use serde::de::DeserializeOwned;
+ 
+ pub const JAR_SCHEME: &str = "mythbrowse-cookie-jar";
+ pub const DELETE_SCHEME: &str = "mythbrowse-cookie-delete";
+@@ -58,10 +70,105 @@ pub fn meta_value(name: &str, value: &str, host_only: bool) -> String {
+     )
+ }
+ 
++/// Encrypts / decrypts the cookie jar file. `None` from either means "could not": a jar that
++/// does not open is ignored (start with no cookies), one that does not seal is not written.
++pub type JarCodecFn = Arc<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
++
++pub struct JarCodec {
++    pub seal: JarCodecFn,
++    pub open: JarCodecFn,
++}
++
++/// File name of the sealed jar in the config dir.
++pub const SEALED_JAR_FILE: &str = "cookie_jar.sealed";
++
++static CODEC: RwLock<Option<Arc<JarCodec>>> = RwLock::new(None);
++
++/// Install (or remove) the jar codec. Call before Servo starts its resource threads.
++pub fn set_jar_codec(codec: Option<JarCodec>) {
++    *CODEC.write().unwrap_or_else(|p| p.into_inner()) = codec.map(Arc::new);
++}
++
++pub fn jar_codec() -> Option<Arc<JarCodec>> {
++    CODEC.read().unwrap_or_else(|p| p.into_inner()).clone()
++}
++
++/// Read and open the sealed jar; `None` when there is none or it does not open / parse.
++pub fn read_sealed_jar<T: DeserializeOwned>(codec: &JarCodec, dir: &Path) -> Option<T> {
++    let blob = std::fs::read(dir.join(SEALED_JAR_FILE)).ok()?;
++    let Some(plain) = (codec.open)(&blob) else {
++        log::warn!("the saved cookie jar could not be decrypted; starting without cookies");
++        return None;
++    };
++    match serde_json::from_slice(&plain) {
++        Ok(v) => Some(v),
++        Err(e) => {
++            log::warn!("the saved cookie jar could not be read ({e}); starting without cookies");
++            None
++        },
++    }
++}
++
++/// Seal `value` and write it to the config dir (temp file, then rename over the old one).
++pub fn write_sealed_jar<T: Serialize>(codec: &JarCodec, value: &T, dir: &Path) {
++    let Ok(plain) = serde_json::to_vec(value) else {
++        log::warn!("cookie jar: could not serialize; not saved");
++        return;
++    };
++    let Some(blob) = (codec.seal)(&plain) else {
++        log::warn!("cookie jar: could not encrypt; not saved");
++        return;
++    };
++    drop(plain);
++    let path = dir.join(SEALED_JAR_FILE);
++    let tmp = dir.join(format!("{SEALED_JAR_FILE}.tmp"));
++    let written = (|| -> std::io::Result<()> {
++        use std::io::Write;
++        let mut opts = std::fs::OpenOptions::new();
++        opts.write(true).create(true).truncate(true);
++        #[cfg(unix)]
++        {
++            use std::os::unix::fs::OpenOptionsExt;
++            opts.mode(0o600);
++        }
++        let mut f = opts.open(&tmp)?;
++        f.write_all(&blob)?;
++        f.sync_all()?;
++        drop(f);
++        std::fs::rename(&tmp, &path)
++    })();
++    if let Err(e) = written {
++        log::warn!("cookie jar: could not save ({e})");
++        let _ = std::fs::remove_file(&tmp);
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn sealed_jar_round_trip() {
++        let dir = std::env::temp_dir().join(format!("mb-jar-test-{}", std::process::id()));
++        std::fs::create_dir_all(&dir).unwrap();
++        let xor = |b: &[u8]| Some(b.iter().map(|x| x ^ 0x5a).collect::<Vec<u8>>());
++        let codec = JarCodec {
++            seal: Arc::new(xor),
++            open: Arc::new(xor),
++        };
++        let v: Vec<String> = vec!["sid=secret".into()];
++        write_sealed_jar(&codec, &v, &dir);
++        let raw = std::fs::read(dir.join(SEALED_JAR_FILE)).unwrap();
++        assert!(!raw.windows(6).any(|w| w == b"secret"));
++        assert_eq!(read_sealed_jar::<Vec<String>>(&codec, &dir), Some(v));
++        let bad = JarCodec {
++            seal: Arc::new(xor),
++            open: Arc::new(|_: &[u8]| None),
++        };
++        assert_eq!(read_sealed_jar::<Vec<String>>(&bad, &dir), None);
++        let _ = std::fs::remove_dir_all(&dir);
++    }
++
+     #[test]
+     fn blocked_set() {
+         set_blocked("Blocked-Set.TEST", true);
+diff --git a/resource_thread.rs b/resource_thread.rs
+index 5ef20d3..18fce01 100644
+--- a/resource_thread.rs
++++ b/resource_thread.rs
+@@ -201,9 +201,17 @@ fn create_http_states(
+     let mut auth_cache = AuthCache::default();
+     let mut cookie_jar = CookieStorage::new(150);
+     if let Some(config_dir) = config_dir {
+-        servo_base::read_json_from_file(&mut auth_cache, config_dir, "auth_cache.json");
+-        servo_base::read_json_from_file(&mut hsts_list, config_dir, "hsts_list.json");
+-        servo_base::read_json_from_file(&mut cookie_jar, config_dir, "cookie_jar.json");
++        if let Some(codec) = mythbrowse_cookies::jar_codec() {
++            // MythBrowse (servo-net-0003): the jar is sealed; HTTP auth stays in memory.
++            servo_base::read_json_from_file(&mut hsts_list, config_dir, "hsts_list.json");
++            if let Some(jar) = mythbrowse_cookies::read_sealed_jar(&codec, config_dir) {
++                cookie_jar = jar;
++            }
++        } else {
++            servo_base::read_json_from_file(&mut auth_cache, config_dir, "auth_cache.json");
++            servo_base::read_json_from_file(&mut hsts_list, config_dir, "hsts_list.json");
++            servo_base::read_json_from_file(&mut cookie_jar, config_dir, "cookie_jar.json");
++        }
+     }
+ 
+     let override_manager = CertificateErrorOverrideManager::new();
+@@ -638,12 +646,20 @@ impl ResourceChannelManager {
+             },
+             CoreResourceMsg::Exit(sender) => {
+                 if let Some(ref config_dir) = self.config_dir {
+-                    let auth_cache = http_state.auth_cache.read();
+-                    servo_base::write_json_to_file(&*auth_cache, config_dir, "auth_cache.json");
+-                    let jar = http_state.cookie_jar.read();
+-                    servo_base::write_json_to_file(&*jar, config_dir, "cookie_jar.json");
+-                    let hsts = http_state.hsts_list.read();
+-                    servo_base::write_json_to_file(&*hsts, config_dir, "hsts_list.json");
++                    if let Some(codec) = mythbrowse_cookies::jar_codec() {
++                        // MythBrowse (servo-net-0003): sealed jar, no auth_cache.json.
++                        let jar = http_state.cookie_jar.read();
++                        mythbrowse_cookies::write_sealed_jar(&codec, &*jar, config_dir);
++                        let hsts = http_state.hsts_list.read();
++                        servo_base::write_json_to_file(&*hsts, config_dir, "hsts_list.json");
++                    } else {
++                        let auth_cache = http_state.auth_cache.read();
++                        servo_base::write_json_to_file(&*auth_cache, config_dir, "auth_cache.json");
++                        let jar = http_state.cookie_jar.read();
++                        servo_base::write_json_to_file(&*jar, config_dir, "cookie_jar.json");
++                        let hsts = http_state.hsts_list.read();
++                        servo_base::write_json_to_file(&*hsts, config_dir, "hsts_list.json");
++                    }
+                 }
+                 self.resource_manager.exit();
+                 let _ = sender.send(());

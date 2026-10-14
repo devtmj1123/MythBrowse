@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-compat"
+description = "MythBrowse site-compat layer: breakage detector, signed per-site ruleset, AI repair helpers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+# Ruleset tool: check, keygen, sign, verify (see docs/COMPAT.md).
+name = "mb-rules"
+path = "src/bin/mb-rules.rs"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+thiserror.workspace = true
+log.workspace = true
+url.workspace = true
+# Ed25519 ruleset signatures. Same crate + version the shell already links through rustls
+# (`aws_lc_rs` feature), so no new C build in the full Servo jobs.
+aws-lc-rs = { version = "1.18", default-features = false, features = ["aws-lc-sys"] }
+base64 = "0.22"

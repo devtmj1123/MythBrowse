@@ -1,0 +1,2337 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+# MythBrowse core compat ruleset, compiled into the browser (crates/compat CORE_RULES).
+# Format: rules/schema.json; how rules are applied: docs/COMPAT.md.
+#
+# Only generic, feature-guarded shims live here: each one does nothing when the engine
+# already has the API, so it is safe on every site. Site-specific fixes are added only after
+# they are reproduced on the real site (top-sites compat job or a user report), never guessed.
+#
+# JS is written in TOML literal strings ('''...''') so backslashes stay as written. Each rule's
+# JS runs inside its own function (one Servo user script per rule), after the bootstrap.
+
+schema = 1
+id = "core"
+version = 2026101202
+description = "Built-in generic polyfills for web APIs Servo may lack."
+
+[[rule]]
+id = "polyfill.request-idle-callback"
+title = "requestIdleCallback / cancelIdleCallback fallback"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["requestIdleCallback"]
+note = "Runs the callback on a short timeout with a 50 ms budget, the usual fallback."
+js = '''
+if (typeof window.requestIdleCallback !== "function") {
+  var nextId = 1, timers = {};
+  window.requestIdleCallback = function (callback, options) {
+    var id = nextId++;
+    timers[id] = setTimeout(function () {
+      delete timers[id];
+      var start = Date.now();
+      callback({
+        didTimeout: false,
+        timeRemaining: function () { return Math.max(0, 50 - (Date.now() - start)); }
+      });
+    }, 1);
+    return id;
+  };
+  window.cancelIdleCallback = function (id) {
+    clearTimeout(timers[id]);
+    delete timers[id];
+  };
+}
+'''
+
+[[rule]]
+id = "polyfill.intersection-observer"
+title = "IntersectionObserver fallback (real viewport geometry, re-checked on scroll/resize/DOM changes)"
+kind = "polyfill"
+hosts = ["*"]
+# ubi.com / ubisoft.com: the script thread never goes idle once IntersectionObserver exists
+# (also with the MutationObserver re-checks off and checks throttled to 250 ms); without it the
+# page loads. Top-1000 run 2026-10-12, root cause in the engine/site, not found yet.
+exclude_hosts = ["ubi.com", "ubisoft.com"]
+fills = ["IntersectionObserver"]
+note = "Reports a target only when it crosses a threshold of its real intersection with the root (+rootMargin). The old stub said every target was visible at once, which made infinite-scroll pages load forever (compat-script hangs)."
+js = '''
+// MythBrowse compat: IntersectionObserver (rule polyfill.intersection-observer).
+// Real geometry, not "everything is visible": the previous stub reported every observed element
+// as intersecting at once, so infinite-scroll sentinels loaded page after page forever and the
+// page never went idle (compat-script hangs in the top-sites runs). Now each target's
+// intersection with the root (viewport or root element, grown by rootMargin) is computed on
+// observe and re-checked after scroll / resize / DOM changes (batched to one check per frame);
+// callbacks fire only when a target crosses a threshold, like the native API.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof window.IntersectionObserver !== "function") {
+  var observers = [];
+  var scheduled = false;
+  var raf = window.requestAnimationFrame ? function (f) { return window.requestAnimationFrame(f); } : function (f) { return setTimeout(f, 16); };
+  var parseMargin = function (m) {
+    var parts = String(m || "0px").trim().split(/\s+/);
+    var vals = parts.map(function (p) {
+      var n = parseFloat(p) || 0;
+      return { v: n, pct: /%$/.test(p) };
+    });
+    while (vals.length < 4) vals.push(vals[vals.length === 3 ? 1 : vals.length === 2 ? 0 : 0]);
+    if (parts.length === 2) vals = [vals[0], vals[1], vals[0], vals[1]];
+    if (parts.length === 3) vals = [vals[0], vals[1], vals[2], vals[1]];
+    return vals; // top right bottom left
+  };
+  var rootRect = function (obs) {
+    var r;
+    if (obs.root && obs.root.nodeType === 1) {
+      var b = obs.root.getBoundingClientRect();
+      r = { top: b.top, left: b.left, right: b.right, bottom: b.bottom };
+    } else {
+      var de = document.documentElement;
+      var w = (de && de.clientWidth) || window.innerWidth, h = (de && de.clientHeight) || window.innerHeight;
+      r = { top: 0, left: 0, right: w, bottom: h };
+    }
+    var m = obs._margin, W = r.right - r.left, H = r.bottom - r.top;
+    var px = function (x, base) { return x.pct ? x.v * base / 100 : x.v; };
+    r.top -= px(m[0], H); r.right += px(m[1], W); r.bottom += px(m[2], H); r.left -= px(m[3], W);
+    r.width = Math.max(0, r.right - r.left); r.height = Math.max(0, r.bottom - r.top);
+    r.x = r.left; r.y = r.top;
+    return r;
+  };
+  var entryFor = function (obs, el, root) {
+    var b = el.getBoundingClientRect();
+    var connected = el.isConnected !== false && (!obs.root || obs.root.contains(el));
+    var top = Math.max(b.top, root.top), left = Math.max(b.left, root.left);
+    var bottom = Math.min(b.bottom, root.bottom), right = Math.min(b.right, root.right);
+    var w = right - left, h = bottom - top;
+    var area = b.width * b.height;
+    // edge-adjacent (zero-area) intersections count, as in the spec
+    var hit = connected && w >= 0 && h >= 0 && !(b.width === 0 && b.height === 0 && (b.top === 0 && b.left === 0 && b.bottom === 0));
+    var ir = hit ? { top: top, left: left, bottom: bottom, right: right, width: Math.max(0, w), height: Math.max(0, h), x: left, y: top }
+                 : { top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0, x: 0, y: 0 };
+    var ratio = !hit ? 0 : area > 0 ? Math.min(1, (ir.width * ir.height) / area) : 1;
+    return {
+      target: el, time: (window.performance && performance.now) ? performance.now() : Date.now(),
+      boundingClientRect: b, intersectionRect: ir, rootBounds: obs.root ? root : root,
+      isIntersecting: hit, intersectionRatio: ratio, isVisible: false
+    };
+  };
+  var thresholdIndex = function (obs, e) {
+    if (!e.isIntersecting) return -1;
+    var t = obs.thresholds, i = 0;
+    while (i < t.length && e.intersectionRatio >= t[i]) i++;
+    return i;
+  };
+  var check = function (obs) {
+    if (!obs._targets.length) return;
+    var root = rootRect(obs), out = [];
+    for (var i = 0; i < obs._targets.length; i++) {
+      var rec = obs._targets[i];
+      var e = entryFor(obs, rec.el, root);
+      var idx = thresholdIndex(obs, e);
+      if (idx !== rec.last) { rec.last = idx; out.push(e); }
+    }
+    if (out.length) {
+      obs._queue = obs._queue.concat(out);
+      var q = obs._queue; obs._queue = [];
+      try { obs._cb.call(obs, q, obs); } catch (err) { setTimeout(function () { throw err; }, 0); }
+    }
+  };
+  var checkAll = function () {
+    scheduled = false;
+    var list = observers.slice();
+    for (var i = 0; i < list.length; i++) check(list[i]);
+  };
+  var schedule = function () {
+    if (scheduled) return;
+    scheduled = true;
+    raf(checkAll);
+  };
+  var listening = false;
+  var listen = function () {
+    if (listening) return;
+    listening = true;
+    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    window.addEventListener("load", schedule);
+    if (typeof MutationObserver === "function") {
+      var mo = new MutationObserver(schedule);
+      var start = function () {
+        if (document.documentElement) mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style", "hidden"] });
+      };
+      if (document.documentElement) start(); else document.addEventListener("DOMContentLoaded", start, { once: true });
+    }
+  };
+  var IO = function IntersectionObserver(callback, options) {
+    if (typeof callback !== "function") throw new TypeError("IntersectionObserver: callback must be a function");
+    var o = options || {};
+    var th = o.threshold == null ? [0] : [].concat(o.threshold);
+    for (var i = 0; i < th.length; i++) {
+      th[i] = Number(th[i]);
+      if (!(th[i] >= 0 && th[i] <= 1)) throw new RangeError("IntersectionObserver: threshold must be in [0, 1]");
+    }
+    th.sort(function (a, b) { return a - b; });
+    this._cb = callback;
+    this._targets = [];
+    this._queue = [];
+    this.root = o.root || null;
+    this.rootMargin = o.rootMargin || "0px";
+    this._margin = parseMargin(this.rootMargin);
+    this.thresholds = th;
+    this.scrollMargin = "0px";
+    this.delay = 0;
+    this.trackVisibility = false;
+  };
+  IO.prototype.observe = function (el) {
+    if (!el || el.nodeType !== 1) throw new TypeError("IntersectionObserver.observe: target must be an Element");
+    for (var i = 0; i < this._targets.length; i++) if (this._targets[i].el === el) return;
+    this._targets.push({ el: el, last: -2 });
+    if (observers.indexOf(this) < 0) observers.push(this);
+    listen();
+    schedule();
+  };
+  IO.prototype.unobserve = function (el) {
+    for (var i = 0; i < this._targets.length; i++) if (this._targets[i].el === el) { this._targets.splice(i, 1); break; }
+    if (!this._targets.length) { var at = observers.indexOf(this); if (at >= 0) observers.splice(at, 1); }
+  };
+  IO.prototype.disconnect = function () {
+    this._targets = [];
+    var at = observers.indexOf(this);
+    if (at >= 0) observers.splice(at, 1);
+  };
+  IO.prototype.takeRecords = function () { var q = this._queue; this._queue = []; return q; };
+  window.IntersectionObserver = IO;
+  if (typeof window.IntersectionObserverEntry !== "function") {
+    var Entry = function IntersectionObserverEntry() {};
+    Entry.prototype.isIntersecting = false;
+    Entry.prototype.intersectionRatio = 0;
+    window.IntersectionObserverEntry = Entry;
+  }
+}
+'''
+
+[[rule]]
+id = "polyfill.resize-observer"
+title = "ResizeObserver fallback (initial size + window resizes)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["ResizeObserver"]
+js = '''
+if (typeof window.ResizeObserver !== "function") {
+  var RO = function ResizeObserver(callback) {
+    if (typeof callback !== "function") {
+      throw new TypeError("ResizeObserver: callback must be a function");
+    }
+    var self = this;
+    this._cb = callback;
+    this._els = [];
+    this._onresize = function () { self._fire(self._els.slice()); };
+  };
+  RO.prototype._fire = function (els) {
+    if (!els.length) return;
+    var entries = els.map(function (el) {
+      var r = el.getBoundingClientRect();
+      var rect = { x: 0, y: 0, top: 0, left: 0, width: r.width, height: r.height,
+        right: r.width, bottom: r.height };
+      var size = [{ inlineSize: r.width, blockSize: r.height }];
+      return { target: el, contentRect: rect, borderBoxSize: size, contentBoxSize: size,
+        devicePixelContentBoxSize: size };
+    });
+    this._cb(entries, this);
+  };
+  RO.prototype.observe = function (el) {
+    if (this._els.indexOf(el) >= 0) return;
+    if (!this._els.length) window.addEventListener("resize", this._onresize);
+    this._els.push(el);
+    var self = this;
+    setTimeout(function () { if (self._els.indexOf(el) >= 0) self._fire([el]); }, 0);
+  };
+  RO.prototype.unobserve = function (el) {
+    var i = this._els.indexOf(el);
+    if (i >= 0) this._els.splice(i, 1);
+    if (!this._els.length) window.removeEventListener("resize", this._onresize);
+  };
+  RO.prototype.disconnect = function () {
+    this._els = [];
+    window.removeEventListener("resize", this._onresize);
+  };
+  window.ResizeObserver = RO;
+}
+'''
+
+[[rule]]
+id = "polyfill.css-escape"
+title = "CSS.escape (CSSOM spec algorithm)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["CSS.escape"]
+js = '''
+if (window.CSS && typeof window.CSS.escape !== "function") {
+  window.CSS.escape = function (value) {
+    if (arguments.length === 0) throw new TypeError("CSS.escape requires an argument.");
+    var string = String(value), length = string.length, index = -1, result = "";
+    var first = string.charCodeAt(0), unit;
+    if (length === 1 && first === 0x2D) return "\\" + string;
+    while (++index < length) {
+      unit = string.charCodeAt(index);
+      if (unit === 0x0000) { result += "\uFFFD"; continue; }
+      if ((unit >= 0x0001 && unit <= 0x001F) || unit === 0x007F ||
+          (index === 0 && unit >= 0x0030 && unit <= 0x0039) ||
+          (index === 1 && unit >= 0x0030 && unit <= 0x0039 && first === 0x002D)) {
+        result += "\\" + unit.toString(16) + " ";
+        continue;
+      }
+      if (unit >= 0x0080 || unit === 0x002D || unit === 0x005F ||
+          (unit >= 0x0030 && unit <= 0x0039) || (unit >= 0x0041 && unit <= 0x005A) ||
+          (unit >= 0x0061 && unit <= 0x007A)) {
+        result += string.charAt(index);
+        continue;
+      }
+      result += "\\" + string.charAt(index);
+    }
+    return result;
+  };
+}
+'''
+
+[[rule]]
+id = "polyfill.document-fonts"
+title = "document.fonts members + FontFace (fonts become @font-face rules)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["document.fonts", "document.fonts.load", "FontFace"]
+note = "Fills what the engine's FontFaceSet lacks (Servo 0.5 has only `ready`: 'document.fonts.load is not a function' in the top-1000 run) and adds FontFace; faces added to the set are written as @font-face rules so they load."
+js = '''
+// MythBrowse compat: document.fonts (FontFaceSet) + FontFace (rule polyfill.document-fonts).
+// Servo 0.5 has a FontFaceSet with only `ready`; 0.1.x may have none. Sites call
+// document.fonts.load()/check() (seen in the top-1000 run: "document.fonts.load is not a
+// function") or construct FontFace objects and add them. Missing members are filled in;
+// FontFace objects added to the set become @font-face rules, so the font really loads.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+(function () {
+  var noop = function () {};
+  var faces = [];
+  var styleEl = null;
+  var css = function (s) { return String(s).replace(/["\\\n]/g, " "); };
+  var render = function () {
+    var root = document.head || document.documentElement;
+    if (!root) return;
+    if (!styleEl) { styleEl = document.createElement("style"); styleEl.setAttribute("data-mb-fontfaces", ""); }
+    var out = [];
+    for (var i = 0; i < faces.length; i++) {
+      var f = faces[i];
+      if (!f._src) continue;
+      out.push("@font-face{font-family:\"" + css(f.family) + "\";src:" + f._src + ";font-style:" + f.style +
+               ";font-weight:" + f.weight + ";font-display:" + f.display +
+               (f.unicodeRange && f.unicodeRange !== "U+0-10FFFF" ? ";unicode-range:" + f.unicodeRange : "") + "}");
+    }
+    styleEl.textContent = out.join("\n");
+    if (!styleEl.parentNode) root.appendChild(styleEl);
+  };
+  var OurFontFace = null;
+  if (typeof window.FontFace !== "function") {
+    var FontFace = OurFontFace = function FontFace(family, source, descriptors) {
+      if (!(this instanceof FontFace)) throw new TypeError("Constructor FontFace requires 'new'");
+      var d = descriptors || {};
+      this.family = String(family);
+      this.style = d.style || "normal"; this.weight = String(d.weight || "normal");
+      this.stretch = d.stretch || "normal"; this.unicodeRange = d.unicodeRange || "U+0-10FFFF";
+      this.variant = d.variant || "normal"; this.featureSettings = d.featureSettings || "normal";
+      this.display = d.display || "auto"; this.ascentOverride = "normal"; this.descentOverride = "normal";
+      this.lineGapOverride = "normal";
+      this._src = null;
+      if (typeof source === "string") {
+        this._src = source;
+      } else if (source && (source instanceof ArrayBuffer || ArrayBuffer.isView(source))) {
+        try {
+          var bytes = source instanceof ArrayBuffer ? new Uint8Array(source) : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+          this._src = "url(" + URL.createObjectURL(new Blob([bytes])) + ")";
+        } catch (e) { this._src = null; }
+      }
+      this.status = "unloaded";
+      var self = this;
+      this.loaded = new Promise(function (res) { self._resolve = res; });
+    };
+    FontFace.prototype.load = function () {
+      this.status = "loaded";
+      this._resolve(this);
+      return this.loaded;
+    };
+    window.FontFace = FontFace;
+  }
+  var proto = {
+    status: "loaded", size: 0, onloading: null, onloadingdone: null, onloadingerror: null,
+    check: function () { return true; },
+    // Resolves with the faces for the font's first family. check() says every font is
+    // available, so load() must agree: an empty list means "no such font yet", and loaders
+    // that poll load() until it is non-empty never finished (smartadserver.com: Adobe
+    // Typekit's loader kept the page busy until the WebDriver timeout). When no face object
+    // of ours matches, a loaded stand-in for the family is returned.
+    load: function (font) {
+      var m = /(?:^|\s)[\d.]+(?:px|pt|pc|em|rem|ex|ch|%|vw|vh|q|mm|cm|in)(?:\s*\/\s*\S+)?\s+(.+)$/i.exec(String(font || ""));
+      var fam = (m ? m[1] : String(font || "")).split(",")[0].trim().replace(/^["']|["']$/g, "");
+      var hit = faces.filter(function (f) { return String(f.family).replace(/^["']|["']$/g, "") === fam; });
+      if (!hit.length && fam) {
+        var stub = { family: fam, style: "normal", weight: "normal", stretch: "normal", unicodeRange: "U+0-10FFFF",
+                     variant: "normal", featureSettings: "normal", display: "auto", status: "loaded" };
+        stub.loaded = Promise.resolve(stub);
+        stub.load = function () { return stub.loaded; };
+        hit = [stub];
+      }
+      return Promise.resolve(hit);
+    },
+    add: function (face) {
+      if (face && faces.indexOf(face) < 0) {
+        faces.push(face);
+        try { render(); } catch (e) { /* no document yet */ }
+        if (face.status === "unloaded" && typeof face.load === "function") { try { face.load(); } catch (e) { /* ignore */ } }
+      }
+      return this;
+    },
+    "delete": function (face) {
+      var i = faces.indexOf(face);
+      if (i < 0) return false;
+      faces.splice(i, 1);
+      try { render(); } catch (e) { /* ignore */ }
+      return true;
+    },
+    clear: function () { faces = []; try { render(); } catch (e) { /* ignore */ } },
+    has: function (face) { return faces.indexOf(face) >= 0; },
+    forEach: function (cb, thisArg) { faces.slice().forEach(function (f) { cb.call(thisArg, f, f, this); }, this); },
+    values: function () { return faces.slice()[Symbol.iterator](); },
+    keys: function () { return faces.slice()[Symbol.iterator](); },
+    entries: function () { return faces.map(function (f) { return [f, f]; })[Symbol.iterator](); },
+    addEventListener: noop, removeEventListener: noop,
+    dispatchEvent: function () { return true; }
+  };
+  var set = document.fonts;
+  if (!set) {
+    set = {};
+    Object.defineProperty(Document.prototype, "fonts", { get: function () { return set; }, configurable: true });
+  }
+  var ownSize = !("size" in set);
+  for (var k in proto) {
+    if (!(k in set)) {
+      try { set[k] = proto[k]; } catch (e) { /* read-only native member */ }
+    }
+  }
+  if (OurFontFace) {
+    // The engine's own FontFaceSet methods only take engine FontFace objects: route ours here.
+    ["add", "delete", "has"].forEach(function (name) {
+      var native = set[name] !== proto[name] ? set[name] : null;
+      try {
+        Object.defineProperty(set, name, {
+          configurable: true, writable: true,
+          value: function (face) {
+            if (face instanceof OurFontFace || !native) return proto[name].apply(set, arguments);
+            return native.apply(set, arguments);
+          }
+        });
+      } catch (e) { /* non-configurable */ }
+    });
+  }
+  if (!(Symbol.iterator in set)) { try { set[Symbol.iterator] = proto.values; } catch (e) { /* ignore */ } }
+  if (!set.ready || typeof set.ready.then !== "function") {
+    try { Object.defineProperty(set, "ready", { value: Promise.resolve(set), configurable: true }); } catch (e) { /* ignore */ }
+  }
+  if (ownSize) Object.defineProperty(set, "size", { get: function () { return faces.length; }, configurable: true });
+})();
+'''
+
+[[rule]]
+id = "polyfill.element-animate"
+title = "Element.animate stub (jumps to the end state)"
+kind = "polyfill"
+hosts = ["*"]
+# bsky.app: the page hangs (script thread never idle) whenever Element.animate exists, with this
+# stub and with one whose animations never finish; without it the page loads (still blank: the
+# app does not render in Servo). Top-1000 run 2026-10-12.
+exclude_hosts = ["bsky.app"]
+fills = ["Element.animate", "Animation"]
+note = "Web Animations missing: animations finish at once (fill: forwards keeps the last keyframe) so code waiting on them carries on. Animation/KeyframeEffect constructors: an Animation runs as a timer over its effect's duration (play/pause/cancel/finish, onfinish, finished) without animating anything; nintendo.com's app threw 'Animation is not defined' and rendered nothing."
+js = '''
+if (typeof Element !== "undefined" && typeof Element.prototype.animate !== "function") {
+  Element.prototype.animate = function (keyframes, options) {
+    var el = this, last = null, key;
+    if (Array.isArray(keyframes)) {
+      last = keyframes[keyframes.length - 1] || null;
+    } else if (keyframes && typeof keyframes === "object") {
+      last = {};
+      for (key in keyframes) {
+        var v = keyframes[key];
+        last[key] = Array.isArray(v) ? v[v.length - 1] : v;
+      }
+    }
+    var fill = options && typeof options === "object" ? options.fill : undefined;
+    if (last && (fill === "forwards" || fill === "both")) {
+      for (key in last) {
+        if (key === "offset" || key === "easing" || key === "composite") continue;
+        try { el.style[key] = last[key]; } catch (e) { /* unsupported property */ }
+      }
+    }
+    var noop = function () {};
+    var anim = {
+      playState: "finished", currentTime: null, startTime: null, playbackRate: 1, id: "",
+      effect: null, timeline: null, pending: false, replaceState: "active",
+      onfinish: null, oncancel: null, onremove: null,
+      play: noop, pause: noop, reverse: noop, finish: noop, cancel: noop,
+      commitStyles: noop, persist: noop, updatePlaybackRate: noop,
+      addEventListener: function (type, fn) {
+        if (type === "finish" && typeof fn === "function") {
+          setTimeout(function () { fn.call(anim, { type: "finish", target: anim }); }, 0);
+        }
+      },
+      removeEventListener: noop,
+      dispatchEvent: function () { return true; }
+    };
+    anim.finished = Promise.resolve(anim);
+    anim.ready = Promise.resolve(anim);
+    setTimeout(function () {
+      if (typeof anim.onfinish === "function") anim.onfinish({ type: "finish", target: anim });
+    }, 0);
+    return anim;
+  };
+}
+if (typeof window.KeyframeEffect !== "function") {
+  var KE = function KeyframeEffect(target, keyframes, options) {
+    var t = typeof options === "number" ? { duration: options } : (options && typeof options === "object" ? options : {});
+    this.target = target || null;
+    this._frames = Array.isArray(keyframes) ? keyframes.slice() : [];
+    this._timing = { duration: +t.duration || 0, delay: +t.delay || 0, endDelay: +t.endDelay || 0,
+      iterations: t.iterations === undefined ? 1 : +t.iterations, fill: t.fill || "auto", easing: t.easing || "linear" };
+  };
+  KE.prototype.getKeyframes = function () { return this._frames.slice(); };
+  KE.prototype.setKeyframes = function (k) { this._frames = Array.isArray(k) ? k.slice() : []; };
+  KE.prototype.getTiming = function () { var o = {}, k; for (k in this._timing) o[k] = this._timing[k]; return o; };
+  KE.prototype.updateTiming = function (t) { if (t) for (var k in t) if (k in this._timing) this._timing[k] = t[k]; };
+  KE.prototype.getComputedTiming = function () {
+    var m = this._timing, it = isFinite(m.iterations) ? m.iterations : 0;
+    return { duration: m.duration, delay: m.delay, endDelay: m.endDelay, iterations: m.iterations, fill: m.fill,
+      activeDuration: m.duration * it, endTime: m.delay + m.duration * it + m.endDelay };
+  };
+  Object.defineProperty(window, "KeyframeEffect", { value: KE, configurable: true, writable: true });
+}
+if (typeof window.Animation !== "function") {
+  // Runs as a timer over the effect's end time; animates nothing (Servo has no Web Animations).
+  var Anim = function Animation(effect) {
+    this.effect = effect || null; this.timeline = document.timeline || null; this.id = "";
+    this.playbackRate = 1; this.startTime = null; this.pending = false; this.replaceState = "active";
+    this.onfinish = null; this.oncancel = null; this.onremove = null;
+    this._state = "idle"; this._t = 0; this._since = 0; this._timer = null; this._listeners = {};
+    this._newPromise();
+    this.ready = Promise.resolve(this);
+  };
+  var AP = Anim.prototype;
+  AP._end = function () { var e = this.effect; return e && e.getComputedTiming ? (e.getComputedTiming().endTime || 0) : 0; };
+  AP._newPromise = function () { var a = this; this.finished = new Promise(function (res, rej) { a._res = res; a._rej = rej; }); this.finished.catch(function () {}); };
+  AP._fire = function (type) {
+    var ev = { type: type, target: this, currentTime: this.currentTime, timelineTime: null };
+    var h = this["on" + type]; if (typeof h === "function") { try { h.call(this, ev); } catch (e) { setTimeout(function () { throw e; }); } }
+    (this._listeners[type] || []).slice().forEach(function (f) { try { f.call(this, ev); } catch (e) { setTimeout(function () { throw e; }); } }, this);
+  };
+  AP._stop = function () { if (this._timer) { clearTimeout(this._timer); this._timer = null; } if (this._state === "running") this._t += Date.now() - this._since; };
+  AP._finishNow = function () { this._stop(); this._t = this._end(); this._state = "finished"; var a = this; a._res(a); setTimeout(function () { a._fire("finish"); }, 0); };
+  Object.defineProperty(AP, "playState", { get: function () { return this._state; }, configurable: true });
+  Object.defineProperty(AP, "currentTime", {
+    get: function () { return this._state === "idle" ? null : this._t + (this._state === "running" ? Date.now() - this._since : 0); },
+    set: function (v) { var run = this._state === "running"; this._stop(); this._t = +v || 0; if (run) { this._state = "paused"; this.play(); } },
+    configurable: true,
+  });
+  AP.play = function () {
+    if (this._state === "running") return;
+    if (this._state === "finished" || this._state === "idle") { if (this._state === "finished") this._newPromise(); this._t = 0; }
+    this._state = "running"; this._since = Date.now(); this.startTime = this.timeline && this.timeline.currentTime;
+    var a = this, left = Math.max(0, this._end() - this._t);
+    this._timer = setTimeout(function () { a._timer = null; a._finishNow(); }, left);
+  };
+  AP.pause = function () { if (this._state === "running") { this._stop(); this._state = "paused"; } else if (this._state === "idle") { this._state = "paused"; } };
+  AP.finish = function () { if (this._state !== "finished") this._finishNow(); };
+  AP.cancel = function () {
+    if (this._state === "idle") return;
+    this._stop(); this._state = "idle"; this._t = 0; this.startTime = null;
+    var err; try { err = new DOMException("The animation was cancelled", "AbortError"); } catch (e) { err = new Error("AbortError"); }
+    this._rej(err); this._newPromise(); var a = this; setTimeout(function () { a._fire("cancel"); }, 0);
+  };
+  AP.reverse = function () { this.playbackRate = -this.playbackRate; };
+  AP.updatePlaybackRate = function (r) { this.playbackRate = r; };
+  AP.persist = function () { this.replaceState = "persisted"; };
+  AP.commitStyles = function () {};
+  AP.addEventListener = function (type, f) { if (typeof f === "function") (this._listeners[type] = this._listeners[type] || []).push(f); };
+  AP.removeEventListener = function (type, f) { var l = this._listeners[type]; if (l) { var i = l.indexOf(f); if (i >= 0) l.splice(i, 1); } };
+  AP.dispatchEvent = function (ev) { if (ev && ev.type) this._fire(ev.type); return true; };
+  Object.defineProperty(window, "Animation", { value: Anim, configurable: true, writable: true });
+}
+'''
+
+[[rule]]
+id = "polyfill.get-animations"
+title = "getAnimations() returns no running animations"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["Element.getAnimations"]
+note = "Web Animations missing (airbnb.com: 130 'getAnimations is not a function'). The Element.animate stub finishes at once, so there is never a running animation to report: an empty list is the truthful answer."
+js = '''
+var none = function () { return []; };
+if (typeof Element !== "undefined" && typeof Element.prototype.getAnimations !== "function") {
+  Element.prototype.getAnimations = none;
+}
+if (typeof Document !== "undefined" && typeof Document.prototype.getAnimations !== "function") {
+  Document.prototype.getAnimations = none;
+}
+if (typeof ShadowRoot !== "undefined" && typeof ShadowRoot.prototype.getAnimations !== "function") {
+  ShadowRoot.prototype.getAnimations = none;
+}
+'''
+
+[[rule]]
+id = "polyfill.adopted-style-sheets"
+title = "adoptedStyleSheets on document and shadow roots (via <style> elements)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["document.adoptedStyleSheets"]
+note = "Servo has constructable CSSStyleSheet (replace/replaceSync) but no adoptedStyleSheets (archive.org: blank page, 'e.adoptedStyleSheets is undefined'). Defined per instance (document + each attachShadow root), not on the prototypes, so feature checks like Lit's ('adoptedStyleSheets' in Document.prototype) still pick their native <style> path. Each adopted sheet is mirrored as a <style data-mb-adopted> at the end of its root; replace/replaceSync/insertRule/deleteRule re-render every root that adopted the sheet."
+js = '''
+if (typeof CSSStyleSheet === "function" && !("adoptedStyleSheets" in document)) {
+  var SP = CSSStyleSheet.prototype;
+  var texts = new WeakMap();   // sheet -> CSS text it was given
+  var owners = new WeakMap();  // sheet -> roots that adopted it
+  var state = new WeakMap();   // root -> { list, styles, queued }
+  var sheetText = function (sheet) {
+    if (texts.has(sheet)) return texts.get(sheet);
+    var out = [];
+    try { for (var i = 0; i < sheet.cssRules.length; i++) out.push(sheet.cssRules[i].cssText); } catch (e) { /* no access */ }
+    return out.join("\n");
+  };
+  var host = function (root) {
+    return root === document ? (document.head || document.documentElement) : root;
+  };
+  var render = function (root) {
+    var st = state.get(root);
+    if (!st) return;
+    st.queued = false;
+    var parent = host(root);
+    if (!parent) return;
+    for (var i = 0; i < st.styles.length; i++) st.styles[i].remove();
+    st.styles = [];
+    for (var k = 0; k < st.list.length; k++) {
+      var el = document.createElement("style");
+      el.setAttribute("data-mb-adopted", "");
+      el.textContent = sheetText(st.list[k]);
+      parent.appendChild(el);
+      st.styles.push(el);
+    }
+    st.rendered = st.list.slice();
+  };
+  var changed = function (st) {
+    if (!st.rendered || st.rendered.length !== st.list.length) return true;
+    for (var i = 0; i < st.list.length; i++) if (st.rendered[i] !== st.list[i]) return true;
+    return false;
+  };
+  var install = function (root) {
+    if (!root || Object.prototype.hasOwnProperty.call(root, "adoptedStyleSheets")) return root;
+    var st = { list: [], styles: [], rendered: [], queued: false };
+    state.set(root, st);
+    Object.defineProperty(root, "adoptedStyleSheets", {
+      configurable: true,
+      enumerable: true,
+      get: function () {
+        // Code may push() into the array it got back: check once the current task is done.
+        if (!st.queued) {
+          st.queued = true;
+          Promise.resolve().then(function () { if (changed(st)) render(root); else st.queued = false; });
+        }
+        return st.list;
+      },
+      set: function (value) {
+        var next = [];
+        var arr = value == null ? [] : Array.prototype.slice.call(value);
+        for (var i = 0; i < arr.length; i++) {
+          if (!(arr[i] instanceof CSSStyleSheet)) throw new TypeError("adoptedStyleSheets: not a CSSStyleSheet");
+          next.push(arr[i]);
+        }
+        for (var j = 0; j < st.list.length; j++) {
+          var o = owners.get(st.list[j]);
+          if (o && next.indexOf(st.list[j]) < 0) { var at = o.indexOf(root); if (at >= 0) o.splice(at, 1); }
+        }
+        for (var m = 0; m < next.length; m++) {
+          var ow = owners.get(next[m]);
+          if (!ow) { ow = []; owners.set(next[m], ow); }
+          if (ow.indexOf(root) < 0) ow.push(root);
+        }
+        st.list = next;
+        if (root === document && document.readyState === "loading" && !document.head) {
+          document.addEventListener("DOMContentLoaded", function () { render(root); }, { once: true });
+        } else {
+          render(root);
+        }
+      }
+    });
+    return root;
+  };
+  var rerender = function (sheet) {
+    var o = owners.get(sheet);
+    if (o) for (var i = 0; i < o.length; i++) render(o[i]);
+  };
+  var wrap = function (name, keepText) {
+    var orig = SP[name];
+    if (typeof orig !== "function") return;
+    SP[name] = function () {
+      var r = orig.apply(this, arguments);
+      var sheet = this;
+      if (keepText) texts.set(sheet, String(arguments[0]));
+      else texts.delete(sheet);
+      if (r && typeof r.then === "function") return r.then(function (v) { rerender(sheet); return v; });
+      rerender(sheet);
+      return r;
+    };
+  };
+  wrap("replaceSync", true);
+  wrap("replace", true);
+  wrap("insertRule", false);
+  wrap("deleteRule", false);
+  install(document);
+  if (typeof Element !== "undefined" && typeof Element.prototype.attachShadow === "function") {
+    var attach = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function () { return install(attach.apply(this, arguments)); };
+  }
+}
+'''
+
+[[rule]]
+id = "polyfill.check-visibility"
+title = "Element.checkVisibility()"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["Element.checkVisibility"]
+note = "Computed-style walk: display:none on the element or an ancestor, display:contents, content-visibility:hidden ancestors, plus the opacity / visibility options."
+js = '''
+// MythBrowse compat: Element.prototype.checkVisibility (rule polyfill.check-visibility).
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof Element !== "undefined" && typeof Element.prototype.checkVisibility !== "function") {
+  Element.prototype.checkVisibility = function (options) {
+    var o = options || {};
+    if (!this.isConnected) return false;
+    var cs;
+    try { cs = getComputedStyle(this); } catch (e) { return false; }
+    // No box (display:none on it or an ancestor, or display:contents) => not visible.
+    if (!cs || cs.display === "none") return false;
+    for (var el = this.parentElement; el; el = el.parentElement) {
+      var s = getComputedStyle(el);
+      if (s.display === "none") return false;
+      if ((o.checkOpacity || o.opacityProperty) && s.opacity === "0") return false;
+      if (s.contentVisibility === "hidden" && el !== this) return false;
+    }
+    if (cs.display === "contents") return false;
+    if ((o.checkOpacity || o.opacityProperty) && cs.opacity === "0") return false;
+    if ((o.checkVisibilityCSS || o.visibilityProperty) && (cs.visibility === "hidden" || cs.visibility === "collapse")) return false;
+    return true;
+  };
+}
+'''
+
+[[rule]]
+id = "polyfill.visual-viewport"
+title = "window.visualViewport (= the layout viewport)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["visualViewport"]
+note = "No pinch zoom in Servo, so scale 1 and offsets 0; width/height/pageLeft/pageTop from the viewport; resize/scroll forwarded from window."
+js = '''
+// MythBrowse compat: window.visualViewport (rule polyfill.visual-viewport).
+// Servo has no pinch zoom, so the visual viewport is the layout viewport: scale 1, offsets 0,
+// size = the viewport without scrollbars, page offsets = scroll position. resize / scroll are
+// forwarded from the window.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof window.visualViewport === "undefined") {
+  var listeners = { resize: [], scroll: [], scrollend: [] };
+  var vv = {
+    offsetLeft: 0, offsetTop: 0, scale: 1, onresize: null, onscroll: null, onscrollend: null,
+    addEventListener: function (type, fn) { if (listeners[type] && typeof fn === "function" && listeners[type].indexOf(fn) < 0) listeners[type].push(fn); },
+    removeEventListener: function (type, fn) { var l = listeners[type]; if (l) { var i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } },
+    dispatchEvent: function (ev) {
+      var h = vv["on" + ev.type];
+      if (typeof h === "function") h.call(vv, ev);
+      var l = (listeners[ev.type] || []).slice();
+      for (var i = 0; i < l.length; i++) l[i].call(vv, ev);
+      return true;
+    }
+  };
+  var de = function () { return document.documentElement; };
+  Object.defineProperties(vv, {
+    width: { get: function () { var d = de(); return d && d.clientWidth ? d.clientWidth : window.innerWidth; }, enumerable: true },
+    height: { get: function () { var d = de(); return d && d.clientHeight ? d.clientHeight : window.innerHeight; }, enumerable: true },
+    pageLeft: { get: function () { return window.scrollX || window.pageXOffset || 0; }, enumerable: true },
+    pageTop: { get: function () { return window.scrollY || window.pageYOffset || 0; }, enumerable: true }
+  });
+  var forward = function (type) {
+    window.addEventListener(type, function () {
+      var ev;
+      try { ev = new Event(type); } catch (e) { ev = { type: type }; }
+      try { Object.defineProperty(ev, "target", { value: vv }); } catch (e) { /* plain object */ }
+      vv.dispatchEvent(ev);
+    }, { passive: true });
+  };
+  forward("resize"); forward("scroll");
+  Object.defineProperty(window, "visualViewport", { value: vv, configurable: true, enumerable: true, writable: false });
+  if (typeof window.VisualViewport === "undefined") {
+    var VisualViewport = function VisualViewport() { throw new TypeError("Illegal constructor"); };
+    Object.setPrototypeOf(vv, VisualViewport.prototype);
+    Object.defineProperty(window, "VisualViewport", { value: VisualViewport, configurable: true, writable: true });
+  }
+}
+'''
+
+[[rule]]
+id = "polyfill.popover"
+title = "Popover API (popover attribute, showPopover/hidePopover/togglePopover, popovertarget)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["popover"]
+note = "Hidden until shown, light dismiss for popover=auto, beforetoggle/toggle events, :popover-open via [data-mb-popover-open] in matches/querySelector. No top layer: open popovers are position:fixed with a high z-index."
+js = '''
+// MythBrowse compat: Popover API (rule polyfill.popover).
+// Gives elements with a popover attribute the hidden-until-shown behaviour, showPopover /
+// hidePopover / togglePopover, popovertarget / popovertargetaction buttons, beforetoggle /
+// toggle events, light dismiss (outside click, Esc) for popover=auto, and a :popover-open
+// stand-in ([data-mb-popover-open]); el.matches(":popover-open") answers too. No top layer:
+// open popovers get position:fixed with a very high z-index instead.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof HTMLElement !== "undefined" && !("popover" in HTMLElement.prototype)) {
+  var OPEN = "data-mb-popover-open";
+  var HP = HTMLElement.prototype;
+  var addCss = function () {
+    var root = document.head || document.documentElement;
+    if (!root || document.querySelector("style[data-mb-popover]")) return;
+    var st = document.createElement("style");
+    st.setAttribute("data-mb-popover", "");
+    st.textContent = "[popover]:not([" + OPEN + "]){display:none!important}" +
+      "[popover][" + OPEN + "]{position:fixed;inset:0;width:fit-content;height:fit-content;margin:auto;" +
+      "border:solid;padding:.25em;overflow:auto;color:CanvasText;background-color:Canvas;z-index:2147483646}";
+    root.insertBefore(st, root.firstChild);
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addCss, { once: true });
+  addCss();
+  var stateOf = function (el) {
+    var v = el.getAttribute("popover");
+    if (v === null) return null;
+    v = v.toLowerCase();
+    return v === "manual" ? "manual" : v === "hint" ? "hint" : "auto";
+  };
+  var isOpen = function (el) { return el.hasAttribute(OPEN); };
+  var fire = function (el, type, oldState, newState, cancelable) {
+    var ev;
+    try { ev = new Event(type, { cancelable: !!cancelable }); } catch (e) { ev = document.createEvent("Event"); ev.initEvent(type, false, !!cancelable); }
+    try { ev.oldState = oldState; ev.newState = newState; } catch (e) { /* read-only */ }
+    return el.dispatchEvent(ev);
+  };
+  var autoStack = [];
+  var show = function (el) {
+    if (stateOf(el) === null) throw new DOMException("Element does not have the popover attribute", "NotSupportedError");
+    if (isOpen(el)) return;
+    if (!el.isConnected) throw new DOMException("Popover is not connected", "InvalidStateError");
+    if (!fire(el, "beforetoggle", "closed", "open", true)) return;
+    if (stateOf(el) !== "manual") {
+      // close auto popovers that are not ancestors of this one
+      for (var i = autoStack.length - 1; i >= 0; i--) {
+        var other = autoStack[i];
+        if (other !== el && !other.contains(el)) hide(other);
+      }
+      autoStack.push(el);
+    }
+    addCss();
+    el.setAttribute(OPEN, "");
+    setTimeout(function () { fire(el, "toggle", "closed", "open", false); }, 0);
+  };
+  var hide = function (el) {
+    if (stateOf(el) === null) throw new DOMException("Element does not have the popover attribute", "NotSupportedError");
+    if (!isOpen(el)) return;
+    fire(el, "beforetoggle", "open", "closed", false);
+    el.removeAttribute(OPEN);
+    var at = autoStack.indexOf(el);
+    if (at >= 0) autoStack.splice(at, 1);
+    setTimeout(function () { fire(el, "toggle", "open", "closed", false); }, 0);
+  };
+  Object.defineProperty(HP, "popover", {
+    get: function () { return stateOf(this); },
+    set: function (v) { if (v === null || v === undefined) this.removeAttribute("popover"); else this.setAttribute("popover", String(v)); },
+    configurable: true, enumerable: true
+  });
+  HP.showPopover = function () { show(this); };
+  HP.hidePopover = function () { hide(this); };
+  HP.togglePopover = function (force) {
+    var want = typeof force === "boolean" ? force : (force && typeof force === "object" && "force" in force ? !!force.force : !isOpen(this));
+    if (want) show(this); else hide(this);
+    return isOpen(this);
+  };
+  var targetOf = function (btn) {
+    if (btn.popoverTargetElement instanceof Element) return btn.popoverTargetElement;
+    var id = btn.getAttribute("popovertarget");
+    return id ? document.getElementById(id) : null;
+  };
+  if (typeof HTMLButtonElement !== "undefined" && !("popoverTargetAction" in HTMLButtonElement.prototype)) {
+    [HTMLButtonElement, typeof HTMLInputElement !== "undefined" ? HTMLInputElement : null].forEach(function (C) {
+      if (!C) return;
+      Object.defineProperty(C.prototype, "popoverTargetAction", {
+        get: function () { var a = (this.getAttribute("popovertargetaction") || "").toLowerCase(); return a === "show" || a === "hide" ? a : "toggle"; },
+        set: function (v) { this.setAttribute("popovertargetaction", v); }, configurable: true
+      });
+    });
+  }
+  var origMatches = Element.prototype.matches;
+  Element.prototype.matches = function (sel) {
+    if (typeof sel === "string" && sel.indexOf(":popover-open") >= 0) sel = sel.split(":popover-open").join("[" + OPEN + "]");
+    return origMatches.call(this, sel);
+  };
+  ["querySelector", "querySelectorAll"].forEach(function (name) {
+    [Document.prototype, Element.prototype, typeof DocumentFragment !== "undefined" ? DocumentFragment.prototype : null].forEach(function (P) {
+      if (!P || typeof P[name] !== "function") return;
+      var orig = P[name];
+      P[name] = function (sel) {
+        if (typeof sel === "string" && sel.indexOf(":popover-open") >= 0) sel = sel.split(":popover-open").join("[" + OPEN + "]");
+        return orig.call(this, sel);
+      };
+    });
+  });
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    var btn = t && t.closest ? t.closest("button[popovertarget],input[popovertarget]") : null;
+    if (btn && !btn.disabled) {
+      var pop = targetOf(btn);
+      if (pop && stateOf(pop) !== null) {
+        var action = btn.popoverTargetAction || "toggle";
+        if (action === "show") show(pop);
+        else if (action === "hide") hide(pop);
+        else if (isOpen(pop)) hide(pop); else show(pop);
+        return;
+      }
+    }
+    // light dismiss: a click outside the topmost auto popover closes it (and those above)
+    for (var i = autoStack.length - 1; i >= 0; i--) {
+      if (autoStack[i].contains(t)) break;
+      hide(autoStack[i]);
+    }
+  }, true);
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Escape" || e.key === "Esc") && autoStack.length) hide(autoStack[autoStack.length - 1]);
+  }, true);
+}
+'''
+
+[[rule]]
+id = "polyfill.offscreen-canvas"
+title = "OffscreenCanvas (main thread, backed by a detached canvas)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["OffscreenCanvas"]
+note = "getContext / convertToBlob / transferToImageBitmap on a detached <canvas>. No transferControlToOffscreen and nothing in workers, so worker-rendering sites keep their fallback path."
+js = '''
+// MythBrowse compat: basic OffscreenCanvas on the main thread (rule polyfill.offscreen-canvas).
+// Backed by a detached <canvas>: getContext("2d" | "webgl" | "webgl2" | "bitmaprenderer"),
+// width/height, convertToBlob(), transferToImageBitmap(). Not transferable to workers (Servo
+// workers get no polyfill); code that feature-detects for a worker path falls back as usual.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof window.OffscreenCanvas === "undefined" && typeof document !== "undefined" && document.createElement) {
+  var OffscreenCanvas = function OffscreenCanvas(width, height) {
+    if (!(this instanceof OffscreenCanvas)) throw new TypeError("Constructor OffscreenCanvas requires 'new'");
+    var c = document.createElement("canvas");
+    c.width = Math.max(0, width | 0); c.height = Math.max(0, height | 0);
+    Object.defineProperty(this, "_c", { value: c });
+    this.oncontextlost = null; this.oncontextrestored = null;
+  };
+  Object.defineProperty(OffscreenCanvas.prototype, "width", {
+    get: function () { return this._c.width; }, set: function (v) { this._c.width = v; }, configurable: true, enumerable: true
+  });
+  Object.defineProperty(OffscreenCanvas.prototype, "height", {
+    get: function () { return this._c.height; }, set: function (v) { this._c.height = v; }, configurable: true, enumerable: true
+  });
+  OffscreenCanvas.prototype.getContext = function (type, options) {
+    var ctx = this._c.getContext(type, options);
+    if (ctx) { try { Object.defineProperty(ctx, "canvas", { value: this, configurable: true }); } catch (e) { /* native getter */ } }
+    return ctx;
+  };
+  OffscreenCanvas.prototype.convertToBlob = function (options) {
+    var c = this._c, o = options || {};
+    return new Promise(function (resolve, reject) {
+      try {
+        c.toBlob(function (b) { if (b) resolve(b); else reject(new DOMException("Could not encode the canvas", "EncodingError")); },
+                 o.type || "image/png", o.quality);
+      } catch (e) { reject(e); }
+    });
+  };
+  OffscreenCanvas.prototype.transferToImageBitmap = function () {
+    // Synchronous in the spec; the best a polyfill can do is hand back a canvas copy, which
+    // drawImage() and most consumers accept wherever an ImageBitmap is.
+    var copy = document.createElement("canvas");
+    copy.width = this._c.width; copy.height = this._c.height;
+    var ctx = copy.getContext("2d");
+    if (ctx) ctx.drawImage(this._c, 0, 0);
+    var g = this._c.getContext("2d");
+    if (g) g.clearRect(0, 0, this._c.width, this._c.height);
+    copy.close = function () {};
+    return copy;
+  };
+  OffscreenCanvas.prototype.addEventListener = function (t, f, o) { this._c.addEventListener(t, f, o); };
+  OffscreenCanvas.prototype.removeEventListener = function (t, f, o) { this._c.removeEventListener(t, f, o); };
+  OffscreenCanvas.prototype.dispatchEvent = function (e) { return this._c.dispatchEvent(e); };
+  Object.defineProperty(window, "OffscreenCanvas", { value: OffscreenCanvas, configurable: true, writable: true });
+  // transferControlToOffscreen is deliberately not provided: a fake one cannot draw to the
+  // visible canvas from a worker, and sites check for it before taking their worker path.
+}
+'''
+
+[[rule]]
+id = "polyfill.indexeddb"
+title = "IndexedDB (in memory, for the life of the page)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["indexedDB"]
+note = "Spec-shaped IndexedDB (open/upgrade, object stores, indexes incl. unique/multiEntry, key ranges, cursors, transactions with rollback on abort). Data lives in memory per document: nothing persists across reloads. Fixes 'indexedDB is not defined' / 'IndexedDB API missing' start-up failures."
+js = '''
+// MythBrowse compat: in-memory IndexedDB shim (rule polyfill.indexeddb in rules/core.toml).
+// Servo has no IndexedDB yet. Sites (Firebase, idb-keyval, localforage, analytics SDKs, React
+// Query persisters...) throw "indexedDB is not defined" or reject at start-up. This gives them a
+// working, spec-shaped API for the life of the page: databases live in memory (per document),
+// nothing is written to disk, so data is gone after a reload, the same as a private window
+// that clears on close. Values are stored as structured clones.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (!("indexedDB" in window)) {
+  var later = function (fn) { setTimeout(fn, 0); };
+  var clone = function (v) {
+    if (typeof structuredClone === "function") return structuredClone(v);
+    return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+  };
+  var err = function (name, msg) {
+    try { return new DOMException(msg || name, name); } catch (e) { var x = new Error(msg || name); x.name = name; return x; }
+  };
+  // ---------------------------------------------------------------- keys
+  var rank = function (k) {
+    if (typeof k === "number") return isNaN(k) ? 0 : 1;
+    if (k instanceof Date) return isNaN(k.getTime()) ? 0 : 2;
+    if (typeof k === "string") return 3;
+    if (k instanceof ArrayBuffer || ArrayBuffer.isView(k)) return 4;
+    if (Array.isArray(k)) return 5;
+    return 0;
+  };
+  var validKey = function (k) {
+    var r = rank(k);
+    if (r === 5) { for (var i = 0; i < k.length; i++) if (!validKey(k[i])) return false; }
+    return r > 0;
+  };
+  var bytes = function (k) { return k instanceof ArrayBuffer ? new Uint8Array(k) : new Uint8Array(k.buffer, k.byteOffset, k.byteLength); };
+  var cmp = function (a, b) {
+    var ra = rank(a), rb = rank(b);
+    if (!ra || !rb) throw err("DataError", "The parameter is not a valid key.");
+    if (ra !== rb) return ra < rb ? -1 : 1;
+    if (ra === 1) return a < b ? -1 : a > b ? 1 : 0;
+    if (ra === 2) { a = a.getTime(); b = b.getTime(); return a < b ? -1 : a > b ? 1 : 0; }
+    if (ra === 3) return a < b ? -1 : a > b ? 1 : 0;
+    if (ra === 4) {
+      var x = bytes(a), y = bytes(b), n = Math.min(x.length, y.length);
+      for (var i = 0; i < n; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+      return x.length === y.length ? 0 : x.length < y.length ? -1 : 1;
+    }
+    for (var j = 0; j < Math.min(a.length, b.length); j++) { var c = cmp(a[j], b[j]); if (c) return c; }
+    return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+  };
+  var keyAt = function (value, path) {
+    if (Array.isArray(path)) {
+      var out = [];
+      for (var i = 0; i < path.length; i++) { var k = keyAt(value, path[i]); if (k === undefined) return undefined; out.push(k); }
+      return out;
+    }
+    if (path === "") return value;
+    var parts = String(path).split("."), v = value;
+    for (var p = 0; p < parts.length; p++) {
+      if (v === null || v === undefined) return undefined;
+      if (typeof v === "string" && parts[p] === "length") v = v.length;
+      else v = v[parts[p]];
+    }
+    return v;
+  };
+  var setKeyAt = function (value, path, key) {
+    var parts = String(path).split("."), v = value;
+    for (var p = 0; p < parts.length - 1; p++) { if (v[parts[p]] === undefined) v[parts[p]] = {}; v = v[parts[p]]; }
+    v[parts[parts.length - 1]] = key;
+  };
+  // ---------------------------------------------------------------- key ranges
+  var IDBKeyRange = function IDBKeyRange(lower, upper, lowerOpen, upperOpen) {
+    this.lower = lower; this.upper = upper; this.lowerOpen = !!lowerOpen; this.upperOpen = !!upperOpen;
+  };
+  IDBKeyRange.prototype.includes = function (k) {
+    if (this.lower !== undefined) { var a = cmp(k, this.lower); if (a < 0 || (a === 0 && this.lowerOpen)) return false; }
+    if (this.upper !== undefined) { var b = cmp(k, this.upper); if (b > 0 || (b === 0 && this.upperOpen)) return false; }
+    return true;
+  };
+  var needKey = function (k) { if (!validKey(k)) throw err("DataError", "The parameter is not a valid key."); return k; };
+  IDBKeyRange.only = function (k) { needKey(k); return new IDBKeyRange(k, k, false, false); };
+  IDBKeyRange.lowerBound = function (k, open) { needKey(k); return new IDBKeyRange(k, undefined, open, true); };
+  IDBKeyRange.upperBound = function (k, open) { needKey(k); return new IDBKeyRange(undefined, k, true, open); };
+  IDBKeyRange.bound = function (l, u, lo, uo) {
+    needKey(l); needKey(u);
+    if (cmp(l, u) > 0) throw err("DataError", "lower is greater than upper");
+    return new IDBKeyRange(l, u, lo, uo);
+  };
+  var toRange = function (q) {
+    if (q === undefined || q === null) return null;
+    if (q instanceof IDBKeyRange) return q;
+    return IDBKeyRange.only(q);
+  };
+  // ---------------------------------------------------------------- events
+  var Emitter = function () {};
+  Emitter.prototype.addEventListener = function (type, fn) {
+    if (typeof fn !== "function" && !(fn && typeof fn.handleEvent === "function")) return;
+    var l = this.__l || (this.__l = {});
+    (l[type] || (l[type] = [])).push(fn);
+  };
+  Emitter.prototype.removeEventListener = function (type, fn) {
+    var l = this.__l && this.__l[type];
+    if (l) { var i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); }
+  };
+  Emitter.prototype.dispatchEvent = function (ev) {
+    try { Object.defineProperty(ev, "target", { value: ev.target || this, configurable: true }); } catch (e) { /* plain */ }
+    try { Object.defineProperty(ev, "currentTarget", { value: this, configurable: true }); } catch (e) { /* plain */ }
+    var h = this["on" + ev.type];
+    if (typeof h === "function") h.call(this, ev);
+    var l = this.__l && this.__l[ev.type];
+    if (l) {
+      l = l.slice();
+      for (var i = 0; i < l.length; i++) {
+        if (typeof l[i] === "function") l[i].call(this, ev); else l[i].handleEvent(ev);
+      }
+    }
+    return !ev.defaultPrevented;
+  };
+  var event = function (type, extra) {
+    var ev = { type: type, bubbles: false, cancelable: true, defaultPrevented: false, timeStamp: Date.now() };
+    ev.preventDefault = function () { ev.defaultPrevented = true; };
+    ev.stopPropagation = function () {};
+    ev.stopImmediatePropagation = function () {};
+    if (extra) for (var k in extra) ev[k] = extra[k];
+    return ev;
+  };
+  var nameList = function (names) {
+    var a = names.slice().sort();
+    a.contains = function (n) { return a.indexOf(n) >= 0; };
+    a.item = function (i) { return a[i] === undefined ? null : a[i]; };
+    return a;
+  };
+  var extend = function (Ctor, Base) {
+    Ctor.prototype = Object.create(Base.prototype);
+    Ctor.prototype.constructor = Ctor;
+  };
+  // ---------------------------------------------------------------- requests
+  var IDBRequest = function IDBRequest() {
+    this.result = undefined; this.error = null; this.source = null; this.transaction = null;
+    this.readyState = "pending"; this.onsuccess = null; this.onerror = null;
+  };
+  extend(IDBRequest, Emitter);
+  var IDBOpenDBRequest = function IDBOpenDBRequest() { IDBRequest.call(this); this.onupgradeneeded = null; this.onblocked = null; };
+  extend(IDBOpenDBRequest, IDBRequest);
+  // ---------------------------------------------------------------- storage
+  var databases = {}; // name -> { version, stores: { name: store data } }
+  var newStoreData = function (keyPath, autoIncrement) {
+    return { keyPath: keyPath === undefined ? null : keyPath, autoIncrement: !!autoIncrement, next: 1, recs: [], indexes: {} };
+  };
+  var find = function (recs, key) { // binary search: index of key, or -(insert point)-1
+    var lo = 0, hi = recs.length - 1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1, c = cmp(recs[mid].k, key);
+      if (c === 0) return mid;
+      if (c < 0) lo = mid + 1; else hi = mid - 1;
+    }
+    return -lo - 1;
+  };
+  var indexKeys = function (ix, value) {
+    var k = keyAt(value, ix.keyPath);
+    if (k === undefined) return [];
+    if (ix.multiEntry && Array.isArray(k)) {
+      var out = [];
+      for (var i = 0; i < k.length; i++) if (validKey(k[i]) && !out.some(function (o) { return cmp(o, k[i]) === 0; })) out.push(k[i]);
+      return out;
+    }
+    return validKey(k) ? [k] : [];
+  };
+  // ---------------------------------------------------------------- transactions
+  var IDBTransaction = function IDBTransaction(db, names, mode) {
+    this.db = db; this.mode = mode; this.objectStoreNames = nameList(names); this.error = null;
+    this.oncomplete = null; this.onerror = null; this.onabort = null; this.durability = "default";
+    this._queue = []; this._done = false; this._snap = {}; this._running = false;
+    var tx = this;
+    later(function () { tx._run(); });
+  };
+  extend(IDBTransaction, Emitter);
+  IDBTransaction.prototype.objectStore = function (name) {
+    if (this._done) throw err("InvalidStateError", "The transaction has finished.");
+    if (!this.objectStoreNames.contains(name)) throw err("NotFoundError", "No objectStore named " + name + " in this transaction");
+    return new IDBObjectStore(this, name);
+  };
+  IDBTransaction.prototype._data = function (name) { return databases[this.db.name].stores[name]; };
+  IDBTransaction.prototype._write = function (name) {
+    if (this.mode === "readonly") throw err("ReadOnlyError", "The transaction is read-only.");
+    if (!(name in this._snap)) {
+      var d = this._data(name);
+      this._snap[name] = { recs: d.recs.slice(), next: d.next };
+    }
+    return this._data(name);
+  };
+  IDBTransaction.prototype._request = function (source, op) {
+    if (this._done) throw err("TransactionInactiveError", "The transaction has finished.");
+    var req = new IDBRequest();
+    req.source = source; req.transaction = this;
+    this._queue.push({ req: req, op: op });
+    if (!this._running) { var tx = this; later(function () { tx._run(); }); }
+    return req;
+  };
+  IDBTransaction.prototype._run = function () {
+    if (this._done || this._running) return;
+    this._running = true;
+    while (this._queue.length && !this._done) {
+      var item = this._queue.shift(), req = item.req;
+      try {
+        req.result = item.op(req);
+        req.readyState = "done";
+        if (item.cursorStep) continue;
+        req.dispatchEvent(event("success"));
+      } catch (e) {
+        req.readyState = "done"; req.error = e; req.result = undefined;
+        var ev = event("error", { target: req });
+        req.dispatchEvent(ev);
+        if (!ev.defaultPrevented && !this._done) {
+          this.error = e;
+          this.dispatchEvent(event("error", { target: req }));
+          this._abort(e);
+        }
+      }
+    }
+    this._running = false;
+    if (!this._done && !this._queue.length) {
+      var tx = this;
+      later(function () { if (!tx._done && !tx._queue.length && !tx._running) tx._complete(); else tx._run(); });
+    }
+  };
+  IDBTransaction.prototype._complete = function () {
+    this._done = true;
+    this.dispatchEvent(event("complete"));
+    if (this._after) this._after(null);
+  };
+  IDBTransaction.prototype._abort = function (e) {
+    if (this._done) return;
+    this._done = true;
+    for (var name in this._snap) {
+      var d = databases[this.db.name] && databases[this.db.name].stores[name];
+      if (d) { d.recs = this._snap[name].recs; d.next = this._snap[name].next; }
+    }
+    this.error = this.error || e || err("AbortError", "The transaction was aborted.");
+    var pending = this._queue; this._queue = [];
+    for (var i = 0; i < pending.length; i++) {
+      pending[i].req.readyState = "done"; pending[i].req.error = err("AbortError", "The transaction was aborted.");
+      pending[i].req.dispatchEvent(event("error"));
+    }
+    this.dispatchEvent(event("abort"));
+    if (this._after) this._after(this.error);
+  };
+  IDBTransaction.prototype.abort = function () {
+    if (this._done) throw err("InvalidStateError", "The transaction has finished.");
+    this._abort(err("AbortError", "The transaction was aborted."));
+  };
+  IDBTransaction.prototype.commit = function () {};
+  // ---------------------------------------------------------------- cursors
+  var IDBCursor = function IDBCursor(source, list, direction, req, tx, keysOnly) {
+    this.source = source; this.direction = direction || "next"; this.request = req;
+    this._list = list; this._i = -1; this._tx = tx; this._keysOnly = keysOnly;
+    this.key = undefined; this.primaryKey = undefined;
+  };
+  IDBCursor.prototype._step = function (n) {
+    var c = this; this._i += n;
+    var req = this.request;
+    this._tx._queue.push({
+      req: req, cursorStep: false,
+      op: function () {
+        var e = c._list[c._i];
+        if (!e) { c.key = c.primaryKey = undefined; if (!c._keysOnly) c.value = undefined; return null; }
+        c.key = e.key; c.primaryKey = e.pk;
+        if (!c._keysOnly) {
+          var d = c._tx._data(c._store), at = find(d.recs, e.pk);
+          c.value = at >= 0 ? clone(d.recs[at].v) : undefined;
+        }
+        return c;
+      }
+    });
+    if (!this._tx._running) { var tx = this._tx; later(function () { tx._run(); }); }
+  };
+  IDBCursor.prototype["continue"] = function (key) {
+    if (key !== undefined) {
+      needKey(key);
+      var j = this._i + 1;
+      var fwd = this.direction.indexOf("prev") < 0;
+      while (j < this._list.length && (fwd ? cmp(this._list[j].key, key) < 0 : cmp(this._list[j].key, key) > 0)) j++;
+      this._step(j - this._i);
+    } else this._step(1);
+  };
+  IDBCursor.prototype.advance = function (n) {
+    if (!(n > 0)) throw new TypeError("advance: count must be positive");
+    this._step(n);
+  };
+  IDBCursor.prototype.continuePrimaryKey = function (key, pk) {
+    var j = this._i + 1;
+    while (j < this._list.length && (cmp(this._list[j].key, key) < 0 || (cmp(this._list[j].key, key) === 0 && cmp(this._list[j].pk, pk) < 0))) j++;
+    this._step(j - this._i);
+  };
+  IDBCursor.prototype.update = function (value) {
+    var store = new IDBObjectStore(this._tx, this._store);
+    var d = this._tx._data(this._store);
+    return store.put(value, d.keyPath === null ? this.primaryKey : undefined);
+  };
+  IDBCursor.prototype["delete"] = function () {
+    return new IDBObjectStore(this._tx, this._store)["delete"](this.primaryKey);
+  };
+  var IDBCursorWithValue = function IDBCursorWithValue() { IDBCursor.apply(this, arguments); this.value = undefined; };
+  extend(IDBCursorWithValue, IDBCursor);
+  var entries = function (list, range, direction) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) if (!range || range.includes(list[i].key)) out.push(list[i]);
+    if (direction && direction.indexOf("prev") === 0) out.reverse();
+    if (direction === "nextunique" || direction === "prevunique") {
+      var u = [];
+      for (var j = 0; j < out.length; j++) {
+        if (u.length && cmp(u[u.length - 1].key, out[j].key) === 0) { if (direction === "prevunique") u[u.length - 1] = out[j]; continue; }
+        u.push(out[j]);
+      }
+      out = u;
+    }
+    return out;
+  };
+  var openCursor = function (self, storeName, list, query, direction, keysOnly) {
+    var tx = self.transaction, range = toRange(query);
+    var req = tx._request(self, function () { return null; });
+    var Ctor = keysOnly ? IDBCursor : IDBCursorWithValue;
+    var cur = new Ctor(self, null, direction, req, tx, keysOnly);
+    cur._store = storeName;
+    // replace the queued op: build the list when it runs, then step to the first entry
+    var item = tx._queue[tx._queue.length - 1];
+    item.op = function () {
+      cur._list = entries(list(), range, direction);
+      cur._i = 0;
+      var e = cur._list[0];
+      if (!e) return null;
+      cur.key = e.key; cur.primaryKey = e.pk;
+      if (!keysOnly) { var d = tx._data(storeName), at = find(d.recs, e.pk); cur.value = at >= 0 ? clone(d.recs[at].v) : undefined; }
+      return cur;
+    };
+    return req;
+  };
+  // ---------------------------------------------------------------- object stores
+  var IDBObjectStore = function IDBObjectStore(tx, name) {
+    this.transaction = tx; this.name = name;
+    var d = tx._data(name);
+    this.keyPath = d.keyPath; this.autoIncrement = d.autoIncrement;
+    this.indexNames = nameList(Object.keys(d.indexes));
+  };
+  var storeEntries = function (tx, name) {
+    return function () { return tx._data(name).recs.map(function (r) { return { key: r.k, pk: r.k }; }); };
+  };
+  IDBObjectStore.prototype._put = function (value, key, noOverwrite) {
+    var tx = this.transaction, name = this.name, d = tx._data(name);
+    if (tx.mode === "readonly") throw err("ReadOnlyError", "The transaction is read-only.");
+    if (d.keyPath !== null && key !== undefined) throw err("DataError", "An explicit key was given to a store with a keyPath.");
+    var v = clone(value);
+    if (d.keyPath !== null) {
+      key = keyAt(v, d.keyPath);
+      if (key === undefined && d.autoIncrement) { key = d.next; setKeyAt(v, d.keyPath, key); }
+    } else if (key === undefined && d.autoIncrement) key = d.next;
+    needKey(key);
+    return tx._request(this, function () {
+      var w = tx._write(name), at = find(w.recs, key);
+      if (at >= 0 && noOverwrite) throw err("ConstraintError", "Key already exists in the object store.");
+      for (var ixn in w.indexes) {
+        var ix = w.indexes[ixn];
+        if (!ix.unique) continue;
+        var ks = indexKeys(ix, v);
+        for (var r = 0; r < w.recs.length; r++) {
+          if (cmp(w.recs[r].k, key) === 0) continue;
+          var other = indexKeys(ix, w.recs[r].v);
+          for (var a = 0; a < ks.length; a++) for (var b = 0; b < other.length; b++)
+            if (cmp(ks[a], other[b]) === 0) throw err("ConstraintError", "Unique index " + ixn + " violated.");
+        }
+      }
+      if (typeof key === "number" && w.autoIncrement && key >= w.next) w.next = Math.floor(key) + 1;
+      if (at >= 0) w.recs[at] = { k: key, v: v }; else w.recs.splice(-at - 1, 0, { k: key, v: v });
+      return key;
+    });
+  };
+  IDBObjectStore.prototype.put = function (value, key) { return this._put(value, key, false); };
+  IDBObjectStore.prototype.add = function (value, key) { return this._put(value, key, true); };
+  IDBObjectStore.prototype.get = function (query) {
+    var tx = this.transaction, name = this.name, range = toRange(query);
+    if (!range) throw err("DataError", "No key or key range specified.");
+    return tx._request(this, function () {
+      var recs = tx._data(name).recs;
+      for (var i = 0; i < recs.length; i++) if (range.includes(recs[i].k)) return clone(recs[i].v);
+      return undefined;
+    });
+  };
+  IDBObjectStore.prototype.getKey = function (query) {
+    var tx = this.transaction, name = this.name, range = toRange(query);
+    return tx._request(this, function () {
+      var recs = tx._data(name).recs;
+      for (var i = 0; i < recs.length; i++) if (range.includes(recs[i].k)) return recs[i].k;
+      return undefined;
+    });
+  };
+  var collect = function (tx, name, query, count, keys) {
+    var range = toRange(query), recs = tx._data(name).recs, out = [];
+    for (var i = 0; i < recs.length && (!count || out.length < count); i++)
+      if (!range || range.includes(recs[i].k)) out.push(keys ? recs[i].k : clone(recs[i].v));
+    return out;
+  };
+  IDBObjectStore.prototype.getAll = function (query, count) {
+    var tx = this.transaction, name = this.name;
+    return tx._request(this, function () { return collect(tx, name, query, count, false); });
+  };
+  IDBObjectStore.prototype.getAllKeys = function (query, count) {
+    var tx = this.transaction, name = this.name;
+    return tx._request(this, function () { return collect(tx, name, query, count, true); });
+  };
+  IDBObjectStore.prototype.count = function (query) {
+    var tx = this.transaction, name = this.name;
+    return tx._request(this, function () { return collect(tx, name, query, 0, true).length; });
+  };
+  IDBObjectStore.prototype["delete"] = function (query) {
+    var tx = this.transaction, name = this.name, range = toRange(query);
+    if (tx.mode === "readonly") throw err("ReadOnlyError", "The transaction is read-only.");
+    return tx._request(this, function () {
+      var w = tx._write(name);
+      w.recs = w.recs.filter(function (r) { return !range.includes(r.k); });
+      return undefined;
+    });
+  };
+  IDBObjectStore.prototype.clear = function () {
+    var tx = this.transaction, name = this.name;
+    if (tx.mode === "readonly") throw err("ReadOnlyError", "The transaction is read-only.");
+    return tx._request(this, function () { tx._write(name).recs = []; return undefined; });
+  };
+  IDBObjectStore.prototype.openCursor = function (query, direction) {
+    return openCursor(this, this.name, storeEntries(this.transaction, this.name), query, direction, false);
+  };
+  IDBObjectStore.prototype.openKeyCursor = function (query, direction) {
+    return openCursor(this, this.name, storeEntries(this.transaction, this.name), query, direction, true);
+  };
+  IDBObjectStore.prototype.createIndex = function (name, keyPath, options) {
+    var tx = this.transaction;
+    if (tx.mode !== "versionchange") throw err("InvalidStateError", "createIndex outside an upgrade.");
+    var d = tx._data(this.name);
+    if (d.indexes[name]) throw err("ConstraintError", "Index " + name + " already exists.");
+    d.indexes[name] = { keyPath: keyPath, unique: !!(options && options.unique), multiEntry: !!(options && options.multiEntry) };
+    this.indexNames = nameList(Object.keys(d.indexes));
+    return new IDBIndex(this, name);
+  };
+  IDBObjectStore.prototype.deleteIndex = function (name) {
+    var tx = this.transaction;
+    if (tx.mode !== "versionchange") throw err("InvalidStateError", "deleteIndex outside an upgrade.");
+    var d = tx._data(this.name);
+    if (!d.indexes[name]) throw err("NotFoundError", "No index " + name);
+    delete d.indexes[name];
+    this.indexNames = nameList(Object.keys(d.indexes));
+  };
+  IDBObjectStore.prototype.index = function (name) {
+    if (!this.transaction._data(this.name).indexes[name]) throw err("NotFoundError", "No index named " + name);
+    return new IDBIndex(this, name);
+  };
+  // ---------------------------------------------------------------- indexes
+  var IDBIndex = function IDBIndex(store, name) {
+    var ix = store.transaction._data(store.name).indexes[name];
+    this.objectStore = store; this.name = name; this.keyPath = ix.keyPath;
+    this.unique = ix.unique; this.multiEntry = ix.multiEntry;
+  };
+  IDBIndex.prototype._entries = function () {
+    var store = this.objectStore, tx = store.transaction, sname = store.name, iname = this.name;
+    return function () {
+      var d = tx._data(sname), ix = d.indexes[iname], out = [];
+      for (var i = 0; i < d.recs.length; i++) {
+        var ks = indexKeys(ix, d.recs[i].v);
+        for (var j = 0; j < ks.length; j++) out.push({ key: ks[j], pk: d.recs[i].k });
+      }
+      out.sort(function (a, b) { return cmp(a.key, b.key) || cmp(a.pk, b.pk); });
+      return out;
+    };
+  };
+  IDBIndex.prototype._query = function (query, count, what) {
+    var list = this._entries(), tx = this.objectStore.transaction, sname = this.objectStore.name, range = toRange(query);
+    return tx._request(this, function () {
+      var es = entries(list(), range), d = tx._data(sname), out = [];
+      for (var i = 0; i < es.length && (!count || out.length < count); i++) {
+        if (what === "key") out.push(es[i].pk);
+        else { var at = find(d.recs, es[i].pk); out.push(clone(d.recs[at].v)); }
+      }
+      return out;
+    });
+  };
+  IDBIndex.prototype.get = function (query) {
+    var r = this._query(query, 1, "value"), item = this.objectStore.transaction._queue[this.objectStore.transaction._queue.length - 1];
+    var op = item.op; item.op = function (req) { return op(req)[0]; };
+    return r;
+  };
+  IDBIndex.prototype.getKey = function (query) {
+    var r = this._query(query, 1, "key"), item = this.objectStore.transaction._queue[this.objectStore.transaction._queue.length - 1];
+    var op = item.op; item.op = function (req) { return op(req)[0]; };
+    return r;
+  };
+  IDBIndex.prototype.getAll = function (query, count) { return this._query(query, count, "value"); };
+  IDBIndex.prototype.getAllKeys = function (query, count) { return this._query(query, count, "key"); };
+  IDBIndex.prototype.count = function (query) {
+    var r = this._query(query, 0, "key"), item = this.objectStore.transaction._queue[this.objectStore.transaction._queue.length - 1];
+    var op = item.op; item.op = function (req) { return op(req).length; };
+    return r;
+  };
+  IDBIndex.prototype.openCursor = function (query, direction) {
+    var c = { transaction: this.objectStore.transaction };
+    var req = openCursor(c, this.objectStore.name, this._entries(), query, direction, false);
+    req.source = this;
+    return req;
+  };
+  IDBIndex.prototype.openKeyCursor = function (query, direction) {
+    var c = { transaction: this.objectStore.transaction };
+    var req = openCursor(c, this.objectStore.name, this._entries(), query, direction, true);
+    req.source = this;
+    return req;
+  };
+  // ---------------------------------------------------------------- databases
+  var IDBDatabase = function IDBDatabase(name) {
+    this.name = name; this.version = databases[name].version; this._closed = false;
+    this.onversionchange = null; this.onclose = null; this.onabort = null; this.onerror = null;
+  };
+  extend(IDBDatabase, Emitter);
+  Object.defineProperty(IDBDatabase.prototype, "objectStoreNames", {
+    get: function () { return nameList(databases[this.name] ? Object.keys(databases[this.name].stores) : []); }
+  });
+  IDBDatabase.prototype.createObjectStore = function (name, options) {
+    if (!this._upgrade) throw err("InvalidStateError", "createObjectStore outside an upgrade.");
+    var stores = databases[this.name].stores;
+    if (stores[name]) throw err("ConstraintError", "Object store " + name + " already exists.");
+    var kp = options && options.keyPath !== undefined ? options.keyPath : null;
+    if (options && options.autoIncrement && (kp === "" || Array.isArray(kp))) throw err("InvalidAccessError", "autoIncrement needs a simple keyPath.");
+    stores[name] = newStoreData(kp, options && options.autoIncrement);
+    this._upgrade.objectStoreNames = nameList(Object.keys(stores));
+    return new IDBObjectStore(this._upgrade, name);
+  };
+  IDBDatabase.prototype.deleteObjectStore = function (name) {
+    if (!this._upgrade) throw err("InvalidStateError", "deleteObjectStore outside an upgrade.");
+    var stores = databases[this.name].stores;
+    if (!stores[name]) throw err("NotFoundError", "No object store " + name);
+    delete stores[name];
+    this._upgrade.objectStoreNames = nameList(Object.keys(stores));
+  };
+  IDBDatabase.prototype.transaction = function (names, mode) {
+    if (this._closed) throw err("InvalidStateError", "The database connection is closing.");
+    if (typeof names === "string") names = [names];
+    names = Array.prototype.slice.call(names);
+    if (!names.length) throw err("InvalidAccessError", "No object store names given.");
+    var stores = databases[this.name].stores;
+    for (var i = 0; i < names.length; i++) if (!stores[names[i]]) throw err("NotFoundError", "No object store named " + names[i]);
+    mode = mode || "readonly";
+    if (mode !== "readonly" && mode !== "readwrite") throw new TypeError("Invalid transaction mode " + mode);
+    return new IDBTransaction(this, names, mode);
+  };
+  IDBDatabase.prototype.close = function () { this._closed = true; };
+  // ---------------------------------------------------------------- factory
+  var IDBFactory = function IDBFactory() {};
+  IDBFactory.prototype.open = function (name, version) {
+    name = String(name);
+    if (version !== undefined && !(version >= 1)) throw new TypeError("IDBFactory.open: version must be a positive integer");
+    var req = new IDBOpenDBRequest();
+    later(function () {
+      var existing = databases[name];
+      var old = existing ? existing.version : 0;
+      var next = version === undefined ? (old || 1) : Math.floor(version);
+      if (next < old) {
+        req.readyState = "done"; req.error = err("VersionError", "The requested version (" + next + ") is less than the existing version (" + old + ").");
+        req.dispatchEvent(event("error"));
+        return;
+      }
+      if (!existing) databases[name] = existing = { version: 0, stores: {} };
+      var db = new IDBDatabase(name);
+      if (next === old) {
+        req.readyState = "done"; req.result = db;
+        req.dispatchEvent(event("success"));
+        return;
+      }
+      var snapshot = { version: old, stores: Object.assign({}, existing.stores) };
+      existing.version = next; db.version = next;
+      var tx = new IDBTransaction(db, Object.keys(existing.stores), "versionchange");
+      db._upgrade = tx;
+      req.transaction = tx; req.result = db; req.readyState = "done";
+      tx._after = function (e) {
+        db._upgrade = null; req.transaction = null;
+        if (e) {
+          databases[name].version = snapshot.version; databases[name].stores = snapshot.stores;
+          if (!snapshot.version) delete databases[name];
+          req.result = undefined; req.error = err("AbortError", "The upgrade transaction was aborted.");
+          req.dispatchEvent(event("error"));
+        } else {
+          req.dispatchEvent(event("success"));
+        }
+      };
+      try {
+        req.dispatchEvent(event("upgradeneeded", { oldVersion: old, newVersion: next }));
+      } catch (e) {
+        tx._abort(e);
+        return;
+      }
+      tx._run();
+    });
+    return req;
+  };
+  IDBFactory.prototype.deleteDatabase = function (name) {
+    var req = new IDBOpenDBRequest();
+    later(function () {
+      var old = databases[name] ? databases[name].version : 0;
+      delete databases[String(name)];
+      req.readyState = "done"; req.result = undefined;
+      req.dispatchEvent(event("success", { oldVersion: old, newVersion: null }));
+    });
+    return req;
+  };
+  IDBFactory.prototype.databases = function () {
+    return Promise.resolve(Object.keys(databases).map(function (n) { return { name: n, version: databases[n].version }; }));
+  };
+  IDBFactory.prototype.cmp = function (a, b) { return cmp(a, b); };
+  var factory = new IDBFactory();
+  var define = function (name, value) {
+    Object.defineProperty(window, name, { value: value, writable: true, configurable: true, enumerable: false });
+  };
+  define("indexedDB", factory);
+  define("IDBFactory", IDBFactory);
+  define("IDBDatabase", IDBDatabase);
+  define("IDBTransaction", IDBTransaction);
+  define("IDBObjectStore", IDBObjectStore);
+  define("IDBIndex", IDBIndex);
+  define("IDBCursor", IDBCursor);
+  define("IDBCursorWithValue", IDBCursorWithValue);
+  define("IDBKeyRange", IDBKeyRange);
+  define("IDBRequest", IDBRequest);
+  define("IDBOpenDBRequest", IDBOpenDBRequest);
+}
+'''
+
+[[rule]]
+id = "polyfill.notification"
+title = "Notification stub (permission is always \"denied\")"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["Notification"]
+note = "Scripts that read Notification.permission unguarded no longer throw; nothing is ever shown or prompted."
+js = '''
+// MythBrowse compat: Notification stub (rule polyfill.notification).
+// Servo has no Notifications API; scripts that read Notification.permission without checking
+// throw a ReferenceError ("Notification is not defined") and stop. The stub reports
+// "denied" (the truth: this browser cannot show web notifications yet) and never prompts.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof window.Notification === "undefined") {
+  var Notification = function Notification(title) {
+    if (!(this instanceof Notification)) throw new TypeError("Constructor Notification requires 'new'");
+    throw new TypeError("Notifications are not available in this browser");
+  };
+  Object.defineProperty(Notification, "permission", { get: function () { return "denied"; }, configurable: true, enumerable: true });
+  Notification.maxActions = 0;
+  Notification.requestPermission = function (cb) {
+    if (typeof cb === "function") setTimeout(function () { cb("denied"); }, 0);
+    return Promise.resolve("denied");
+  };
+  Object.defineProperty(window, "Notification", { value: Notification, configurable: true, writable: true });
+}
+'''
+
+[[rule]]
+id = "site.css-animation-implicit-end"
+title = "CSS animations with an implicit end keyframe end on the element's own style (Servo freezes them mid-way)"
+kind = "site"
+hosts = ["live.com", "microsoftonline.com", "office.com", "office365.com", "microsoft365.com", "cloud.microsoft", "microsoft.com", "azure.com", "outlook.com", "sharepoint.com", "onedrive.com", "bing.com", "msn.com", "xbox.com", "skype.com"]
+note = "Servo recomputes running animations' keyframes from the already-animated style when a stylesheet changes (CSS-in-JS), so `@keyframes{0%{opacity:0}}` + fill-mode both froze Microsoft's sign-in card invisible (login.live.com). Ends such animations on the element's own value. Engine fix: upstream issue drafts/stylo-0001."
+css = "[data-mb-anim-end]{animation-name:none!important}"
+js = '''
+// MythBrowse compat: CSS animation end state (rule site.css-animation-implicit-end).
+// Two Servo bugs (stylo 0.15 servo/animation.rs + matching.rs):
+//  1. When any stylesheet changes while a CSS animation runs (CSS-in-JS libraries such as
+//     Griffel insert rules all the time), the keyframes are recomputed from the element's
+//     *current* style, which already holds the animated value. A keyframe the @keyframes rule
+//     leaves out (`@keyframes f{0%{opacity:0}}`: 100% means "the element's own value") takes
+//     that mid-animation value, and with fill-mode forwards/both the element stays frozen there:
+//     Microsoft's sign-in card stayed at opacity 0..0.6 (login.live.com, login.microsoftonline.com).
+//  2. A finished animation is dropped, so the next stylesheet change or any change to the
+//     element's animation-* properties starts it again from 0%.
+//  3. A style-attribute change only swaps that one rule level, so an inline `animation-name: none`
+//     leaves the last animated value in the element's style (it stayed at opacity 0 even with
+//     an inline `opacity: 1`). Only a full selector re-match drops it.
+// Fix: when an element's only animation ends and its end keyframe is implicit, its correct end
+// state is its own style. The element gets a `data-mb-anim-end` attribute, which the rule's
+// CSS (`[data-mb-anim-end]{animation-name:none!important}`, injected once at document start so
+// it adds no later stylesheet change) matches: the attribute forces a full re-match (fixes 3),
+// the animation is gone, and nothing can restart it (fixes 2). The attribute is removed again
+// when the page changes the element's class or style attribute, so later animations the page
+// starts still run. Copyright (c) 2026 JustMyth / Tan Ming Jing. SPDX-License-Identifier: MPL-2.0.
+if (typeof document.addEventListener === "function" && !window.__mbAnimEndFix) {
+  Object.defineProperty(window, "__mbAnimEndFix", { value: true });
+  var cache = Object.create(null);
+  var saved = typeof WeakMap === "function" ? new WeakMap() : null;
+  var KEYFRAMES = 7;
+
+  var findKeyframes = function (rules, name) {
+    var found = null;
+    for (var i = 0; rules && i < rules.length; i++) {
+      var r = rules[i];
+      if (r.type === KEYFRAMES && r.name === name) found = r;
+      else if (r.cssRules && r.type !== KEYFRAMES) {
+        var inner = findKeyframes(r.cssRules, name);
+        if (inner) found = inner;
+      }
+    }
+    return found;
+  };
+
+  // Which of the 0% / 100% keyframes an @keyframes rule spells out (null: rule not found).
+  var keyframeEnds = function (name) {
+    if (cache[name]) return cache[name];
+    var rule = null, sheets = document.styleSheets;
+    for (var i = 0; i < sheets.length; i++) {
+      var rules = null;
+      try { rules = sheets[i].cssRules; } catch (e) { continue; }
+      var r = findKeyframes(rules, name);
+      if (r) rule = r;
+    }
+    if (!rule) return null;
+    var ends = { from: false, to: false };
+    for (var k = 0; k < rule.cssRules.length; k++) {
+      // Servo has no CSSKeyframeRule.keyText: read the selector off cssText ("0%, 50% { ... }").
+      var kf = rule.cssRules[k];
+      var keyText = typeof kf.keyText === "string" ? kf.keyText : String(kf.cssText).split("{")[0];
+      var keys = keyText.split(",");
+      for (var j = 0; j < keys.length; j++) {
+        var key = keys[j].trim().toLowerCase();
+        if (key === "from" || parseFloat(key) === 0) ends.from = true;
+        if (key === "to" || parseFloat(key) === 100) ends.to = true;
+      }
+    }
+    cache[name] = ends;
+    return ends;
+  };
+
+  var list = function (value) {
+    return String(value).split(",").map(function (s) { return s.trim(); });
+  };
+
+  // The keyframe an animation that ran `count` iterations in `dir` ends on.
+  var endsOnTo = function (dir, count) {
+    var n = Number(count);
+    if (!isFinite(n) || n <= 0 || Math.floor(n) !== n) return null;
+    var odd = n % 2 === 1;
+    if (dir === "normal") return true;
+    if (dir === "reverse") return false;
+    if (dir === "alternate") return odd;
+    if (dir === "alternate-reverse") return !odd;
+    return null;
+  };
+
+  var ATTR = "data-mb-anim-end";
+  var restore = function (el) {
+    var mo = saved.get(el);
+    if (!mo) return;
+    saved.delete(el);
+    mo.disconnect();
+    el.removeAttribute(ATTR);
+  };
+
+  document.addEventListener("animationend", function (e) {
+    var el = e.target;
+    if (!saved || !el || el.nodeType !== 1 || e.pseudoElement || saved.has(el)) return;
+    if (typeof MutationObserver !== "function") return;
+    var cs = getComputedStyle(el);
+    var names = list(cs.animationName);
+    if (names.length !== 1 || names[0] !== e.animationName) return;
+    var fill = list(cs.animationFillMode)[0];
+    if (fill !== "forwards" && fill !== "both") return;
+    var toEnd = endsOnTo(list(cs.animationDirection)[0], list(cs.animationIterationCount)[0]);
+    if (toEnd === null) return;
+    var ends = keyframeEnds(e.animationName);
+    if (!ends || (toEnd ? ends.to : ends.from)) return;
+    var mo = new MutationObserver(function () { restore(el); });
+    saved.set(el, mo);
+    el.setAttribute(ATTR, "");
+    // Observe after our own change so it does not count as the page's.
+    mo.observe(el, { attributes: true, attributeFilter: ["class", "style"] });
+  }, true);
+}
+'''
+
+[[rule]]
+id = "site.broadcast-channel-frame-relay"
+title = "BroadcastChannel messages from a frame redirected back to its parent's origin reach the parent"
+kind = "site"
+hosts = ["live.com", "microsoftonline.com", "office.com", "office365.com", "microsoft365.com", "cloud.microsoft", "microsoft.com", "azure.com", "outlook.com", "sharepoint.com", "onedrive.com", "bing.com", "msn.com", "xbox.com", "skype.com"]
+note = "Servo keeps an iframe in the event loop of the site it started at, so after a cross-site redirect back to the parent's origin (OAuth silent sign-in) BroadcastChannel never reaches the parent: MSAL.js v5 silent sign-in on outlook.live.com timed out after 10 s. Relays the messages with same-origin postMessage."
+js = '''
+// MythBrowse compat: BroadcastChannel relay for redirected frames
+// (rule site.broadcast-channel-frame-relay).
+// Servo bug (servo-constellation 0.1.4 get_or_create_event_loop_for_new_pipeline): an iframe's
+// event loop is picked from the URL it *starts* at. When that URL redirects back to the parent's
+// origin (the OAuth silent sign-in: login.microsoftonline.com -> login.live.com ->
+// outlook.live.com/mail/oauthRedirect.html), the same-origin document still lives in the other
+// site's event loop: the parent gets a cross-origin WindowProxy (SecurityError on
+// iframe.contentWindow.location) and BroadcastChannel messages from the frame never reach it.
+// MSAL.js v5 hands the sign-in response back exactly that way, so Outlook's silent sign-in timed
+// out after 10 s every time.
+// Fix: in a frame whose parent it cannot reach (cross-origin, or this engine bug), every
+// BroadcastChannel message is also sent with postMessage to parent and top, restricted to this
+// document's own origin, so a truly cross-origin parent never receives it. A top or parent
+// document of the same origin re-broadcasts it on a channel of the same name, which delivers
+// it to the page's own BroadcastChannel listeners. Frames whose parent is reachable are left
+// alone (BroadcastChannel already works there, so nothing is delivered twice).
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+if (typeof window.BroadcastChannel === "function" && !window.__mbBcRelay) {
+  Object.defineProperty(window, "__mbBcRelay", { value: true });
+  var BC = window.BroadcastChannel;
+  var TAG = "__mbBroadcastRelay";
+  var origin = location.origin;
+  var seen = Object.create(null);
+
+  var parentUnreachable = function () {
+    if (window.parent === window) return false;
+    try { void window.parent.location.href; return false; } catch (e) { return true; }
+  };
+
+  if (parentUnreachable() && origin && origin !== "null") {
+    var post = BC.prototype.postMessage;
+    BC.prototype.postMessage = function (message) {
+      var result = post.apply(this, arguments);
+      try {
+        var env = {};
+        env[TAG] = 1;
+        env.id = String(Math.random()).slice(2) + String(Date.now());
+        env.name = String(this.name);
+        env.data = message;
+        var targets = [window.parent];
+        if (window.top !== window.parent) targets.push(window.top);
+        for (var i = 0; i < targets.length; i++) targets[i].postMessage(env, origin);
+      } catch (e) { /* unclonable message: the native send above is all we can do */ }
+      return result;
+    };
+  }
+
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!d || typeof d !== "object" || d[TAG] !== 1 || e.origin !== origin) return;
+    if (typeof d.id !== "string" || typeof d.name !== "string" || seen[d.id]) return;
+    seen[d.id] = 1;
+    var ch = new BC(d.name);
+    ch.postMessage(d.data);
+    ch.close();
+  });
+}
+'''
+
+[[rule]]
+id = "polyfill.dynamics-compressor"
+title = "createDynamicsCompressor() fallback (unity-gain pass-through with the compressor's params)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["AudioContext.createDynamicsCompressor"]
+note = "Servo's Web Audio lacks DynamicsCompressorNode; audio-fingerprint start-up code threw and tinyurl.com never left its loading screen. Audio passes through uncompressed."
+js = '''
+// MythBrowse compat: BaseAudioContext.createDynamicsCompressor (rule polyfill.dynamics-compressor).
+// Servo's Web Audio has no DynamicsCompressorNode. Audio-fingerprint code (tinyurl.com's
+// start-up) calls createDynamicsCompressor() on an OfflineAudioContext, throws, and the app
+// never leaves its loading screen. The fallback is a GainNode at unity gain (audio passes
+// through uncompressed) with the compressor's AudioParams (threshold, knee, ratio, attack,
+// release: the spec defaults, settable, not applied) and `reduction` 0.
+// Also guards AudioBuffer.copyFromChannel(): on a buffer whose data has not been handed to JS
+// yet (a new AudioBuffer, a rendered OfflineAudioContext result) Servo 0.5 builds a copy twice
+// the destination's length and the script thread panics (`data.len() <= buffer.len()`,
+// shopee.co.id once this fallback let its fingerprint code reach copyFromChannel). Calling
+// getChannelData() first moves the data to JS, where the copy is correct. The engine fix is
+// servo-script patch 0005; the guard keeps unpatched engines alive.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+(function () {
+  var AB = window.AudioBuffer;
+  if (!AB || !AB.prototype || AB.prototype.__mbCopyGuard) return;
+  var copy = AB.prototype.copyFromChannel, data = AB.prototype.getChannelData;
+  if (typeof copy !== "function" || typeof data !== "function") return;
+  Object.defineProperty(AB.prototype, "__mbCopyGuard", { value: true });
+  Object.defineProperty(AB.prototype, "copyFromChannel", {
+    value: function copyFromChannel(destination, channelNumber) {
+      try { data.call(this, channelNumber >>> 0); } catch (e) { /* the real call reports it */ }
+      return copy.apply(this, arguments);
+    },
+    configurable: true, writable: true,
+  });
+})();
+(function () {
+  var Base = window.BaseAudioContext || window.AudioContext || window.OfflineAudioContext;
+  if (!Base || !Base.prototype || typeof Base.prototype.createGain !== "function") return;
+  if (typeof Base.prototype.createDynamicsCompressor === "function") return;
+  var param = function (value, min, max) {
+    var p = {
+      value: value, defaultValue: value, minValue: min, maxValue: max, automationRate: "k-rate",
+      setValueAtTime: function (v) { p.value = v; return p; },
+      linearRampToValueAtTime: function (v) { p.value = v; return p; },
+      exponentialRampToValueAtTime: function (v) { p.value = v; return p; },
+      setTargetAtTime: function (v) { p.value = v; return p; },
+      setValueCurveAtTime: function () { return p; },
+      cancelScheduledValues: function () { return p; },
+      cancelAndHoldAtTime: function () { return p; },
+    };
+    return p;
+  };
+  var create = function () {
+    var node = this.createGain();
+    node.gain.value = 1;
+    var params = {
+      threshold: param(-24, -100, 0), knee: param(30, 0, 40), ratio: param(12, 1, 20),
+      attack: param(0.003, 0, 1), release: param(0.25, 0, 1),
+    };
+    for (var k in params) Object.defineProperty(node, k, { value: params[k], enumerable: true });
+    Object.defineProperty(node, "reduction", { value: 0, enumerable: true });
+    return node;
+  };
+  Object.defineProperty(Base.prototype, "createDynamicsCompressor", { value: create, configurable: true, writable: true });
+  if (typeof window.DynamicsCompressorNode === "undefined") {
+    var D = function DynamicsCompressorNode(context) {
+      if (!context || typeof context.createDynamicsCompressor !== "function") throw new TypeError("DynamicsCompressorNode needs a BaseAudioContext");
+      return context.createDynamicsCompressor();
+    };
+    Object.defineProperty(window, "DynamicsCompressorNode", { value: D, configurable: true, writable: true });
+  }
+})();
+'''
+
+[[rule]]
+id = "polyfill.console-methods"
+title = "Missing console methods (console.table, group, count, time, ...) forward to console.log"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["console.table"]
+note = "Servo's console lacks console.table; squarespace.com's homepage bundle called it unguarded and stopped before rendering ('console.table is not a function')."
+js = '''
+// MythBrowse compat: missing console methods (rule polyfill.console-methods).
+// Servo's console lacks some of the less common methods (console.table in the top-1000 run).
+// Sites that call them unguarded throw "console.table is not a function" and the rest of that
+// script never runs (squarespace.com's homepage bundle stopped before it rendered anything).
+// Each missing method forwards to console.log (or a no-op), so output still reaches the log.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+(function () {
+  var c = window.console;
+  if (!c) return;
+  var log = typeof c.log === "function" ? c.log : function () {};
+  function def(name, fn) {
+    if (typeof c[name] === "function") return;
+    try { Object.defineProperty(c, name, { value: fn, configurable: true, writable: true, enumerable: true }); }
+    catch (e) { try { c[name] = fn; } catch (e2) {} }
+  }
+  function fwd() { try { log.apply(c, arguments); } catch (e) {} }
+  ["debug", "info", "warn", "error", "trace", "dir", "dirxml", "group", "groupCollapsed"].forEach(function (n) { def(n, fwd); });
+  def("groupEnd", function () {});
+  def("table", function (data) { fwd(data); });
+  def("assert", function (cond) {
+    if (cond) return;
+    fwd.apply(null, ["Assertion failed:"].concat(Array.prototype.slice.call(arguments, 1)));
+  });
+  var counts = Object.create(null), timers = Object.create(null);
+  def("count", function (label) { label = label === undefined ? "default" : String(label); counts[label] = (counts[label] || 0) + 1; fwd(label + ": " + counts[label]); });
+  def("countReset", function (label) { counts[label === undefined ? "default" : String(label)] = 0; });
+  var now = function () { return (window.performance && performance.now) ? performance.now() : Date.now(); };
+  def("time", function (label) { timers[label === undefined ? "default" : String(label)] = now(); });
+  def("timeLog", function (label) { label = label === undefined ? "default" : String(label); if (label in timers) fwd(label + ": " + (now() - timers[label]) + " ms"); });
+  def("timeEnd", function (label) { label = label === undefined ? "default" : String(label); if (label in timers) { fwd(label + ": " + (now() - timers[label]) + " ms"); delete timers[label]; } });
+})();
+'''
+
+[[rule]]
+id = "polyfill.performance-measure"
+title = "performance.measure() accepts navigation-timing names (fetchStart, domComplete, ...)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["performance.measure(navigation timing name)"]
+note = "Servo throws OperationError for measure(name, 'fetchStart') ('fetchStart hasn't been implemented', ~90 uncaught errors per aliexpress.com load). Retries with the names turned into times since navigationStart; other errors are thrown as before."
+js = '''
+// MythBrowse compat: performance.measure() with navigation-timing names (rule
+// polyfill.performance-measure).
+// performance.measure(name, "fetchStart") (and the other PerformanceTiming attribute names) is
+// valid in browsers: the name stands for that navigation-timing time. Servo throws
+// ("OperationError: fetchStart hasn't been implemented"), uncaught on aliexpress.com (93 errors
+// per load). On that error the call is retried with the names turned into times relative to
+// navigationStart; if the engine cannot take the options form either, the measure starts at 0.
+// Other errors (an unknown mark name, a bad argument) are thrown as before.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+(function () {
+  var P = window.Performance;
+  if (!P || !P.prototype || typeof P.prototype.measure !== "function") return;
+  var orig = P.prototype.measure;
+  if (orig.__mbNav) return;
+  var NAV = /^(navigationStart|unloadEvent(Start|End)|redirect(Start|End)|fetchStart|domainLookup(Start|End)|connect(Start|End)|secureConnectionStart|request(Start)|response(Start|End)|domLoading|domInteractive|domContentLoadedEvent(Start|End)|domComplete|loadEvent(Start|End))$/;
+  function isNav(x) { return typeof x === "string" && NAV.test(x); }
+  function navTime(perf, x) {
+    var t = perf.timing, ns = t && t.navigationStart;
+    var v = t && t[x];
+    if (!ns || !v) return 0;
+    return Math.max(0, v - ns);
+  }
+  function measure(name, a, b) {
+    try { return orig.apply(this, arguments); }
+    catch (e) {
+      var opt = a && typeof a === "object" ? a : null;
+      var hasNav = isNav(a) || isNav(b) || (opt && (isNav(opt.start) || isNav(opt.end)));
+      if (!hasNav) throw e;
+      var self = this, o = {};
+      var s = opt ? opt.start : a, en = opt ? opt.end : b;
+      if (s !== undefined) o.start = isNav(s) ? navTime(self, s) : s;
+      if (en !== undefined) o.end = isNav(en) ? navTime(self, en) : en;
+      if (opt && opt.detail !== undefined) o.detail = opt.detail;
+      if (opt && opt.duration !== undefined) o.duration = opt.duration;
+      try { return orig.call(self, name, o); }
+      catch (e2) { return orig.call(self, name); }
+    }
+  }
+  measure.__mbNav = true;
+  Object.defineProperty(P.prototype, "measure", { value: measure, configurable: true, writable: true, enumerable: true });
+})();
+'''
+
+[[rule]]
+id = "polyfill.svg-geometry"
+title = "SVG geometry DOM (getBBox, getCTM/getScreenCTM, getTotalLength/getPointAtLength, createSVGPoint/Matrix, ...)"
+kind = "polyfill"
+hosts = ["*"]
+fills = ["SVGGraphicsElement.getBBox"]
+note = "Servo's SVG DOM has none of the geometry methods; chart/animation code threw (avast.com 'getBBox is not a function' / 'getScreenCTM is not a function', pages.dev 'getTotalLength is not a function'). Computed from the elements' own geometry attributes (curves sampled), not from layout."
+js = '''
+// MythBrowse compat: SVG geometry DOM (rule polyfill.svg-geometry).
+// Servo draws SVG but its SVG DOM has none of the geometry methods: getBBox, getCTM,
+// getScreenCTM, getTotalLength, getPointAtLength, createSVGPoint/Matrix/Rect,
+// getComputedTextLength, pauseAnimations. Chart and animation code calls them unguarded
+// (avast.com: "getBBox is not a function", "getScreenCTM is not a function", 65 errors per
+// load; pages.dev / workers.dev: "getTotalLength is not a function").
+// Boxes and lengths are computed from the element's own geometry attributes (rect, circle,
+// ellipse, line, polyline, polygon, path, image, use, text by measured glyph width, groups as
+// the union of their children), not from layout, so they also work for elements Servo did not
+// lay out. Curves are measured by sampling. Missing members only; native ones are kept.
+// SPDX-License-Identifier: MPL-2.0
+// Copyright (c) 2026 JustMyth / Tan Ming Jing
+(function () {
+  if (typeof SVGElement === "undefined" || typeof DOMMatrix === "undefined") return;
+  var G = (window.SVGGraphicsElement || SVGElement).prototype;
+  var GEO = (window.SVGGeometryElement || window.SVGPathElement || SVGElement).prototype;
+  var SVG = window.SVGSVGElement ? SVGSVGElement.prototype : null;
+  function def(proto, name, fn) {
+    if (!proto || name in proto) return;
+    Object.defineProperty(proto, name, { value: fn, configurable: true, writable: true });
+  }
+  function num(el, a, d) {
+    var v = parseFloat(el.getAttribute(a));
+    return isFinite(v) ? v : (d || 0);
+  }
+  function rect(x, y, w, h) {
+    var R = window.DOMRect || function (x, y, w, h) { this.x = x; this.y = y; this.width = w; this.height = h; };
+    return new R(x, y, w, h);
+  }
+  // ---- path data -> polyline (sampled) ----
+  var CMD = /([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)/g;
+  function nums(s) {
+    var m = s.match(/-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g);
+    return m ? m.map(Number) : [];
+  }
+  function pathPoints(d) {
+    var subs = [], cur = [], x = 0, y = 0, sx = 0, sy = 0, cx = 0, cy = 0, prev = "", m, N = 16;
+    function to(px, py) { cur.push([px, py]); x = px; y = py; }
+    function cubic(x1, y1, x2, y2, x3, y3) {
+      var x0 = x, y0 = y;
+      for (var i = 1; i <= N; i++) {
+        var t = i / N, u = 1 - t;
+        to(u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
+           u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3);
+      }
+      cx = x2; cy = y2;
+    }
+    function quad(x1, y1, x2, y2) {
+      var x0 = x, y0 = y;
+      for (var i = 1; i <= N; i++) {
+        var t = i / N, u = 1 - t;
+        to(u * u * x0 + 2 * u * t * x1 + t * t * x2, u * u * y0 + 2 * u * t * y1 + t * t * y2);
+      }
+      cx = x1; cy = y1;
+    }
+    function arc(rx, ry, rot, large, sweep, x2, y2) {
+      // Endpoint -> center parameterisation (SVG implementation notes F.6.5).
+      var x1 = x, y1 = y;
+      rx = Math.abs(rx); ry = Math.abs(ry);
+      if (!rx || !ry) { to(x2, y2); return; }
+      var phi = rot * Math.PI / 180, cs = Math.cos(phi), sn = Math.sin(phi);
+      var dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+      var x1p = cs * dx + sn * dy, y1p = -sn * dx + cs * dy;
+      var lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+      if (lam > 1) { rx *= Math.sqrt(lam); ry *= Math.sqrt(lam); }
+      var num_ = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+      var co = Math.sqrt(Math.max(0, num_ / (rx * rx * y1p * y1p + ry * ry * x1p * x1p))) * (large === sweep ? -1 : 1);
+      var cxp = co * rx * y1p / ry, cyp = -co * ry * x1p / rx;
+      var ccx = cs * cxp - sn * cyp + (x1 + x2) / 2, ccy = sn * cxp + cs * cyp + (y1 + y2) / 2;
+      function ang(ux, uy, vx, vy) {
+        var a = Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy);
+        return a;
+      }
+      var t1 = ang(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+      var dt = ang((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+      if (!sweep && dt > 0) dt -= 2 * Math.PI; else if (sweep && dt < 0) dt += 2 * Math.PI;
+      var n = Math.max(4, Math.ceil(Math.abs(dt) / (Math.PI / 8)));
+      for (var i = 1; i <= n; i++) {
+        var t = t1 + dt * i / n;
+        to(ccx + rx * Math.cos(t) * cs - ry * Math.sin(t) * sn, ccy + rx * Math.cos(t) * sn + ry * Math.sin(t) * cs);
+      }
+      x = x2; y = y2;
+    }
+    String(d || "").replace(CMD, function (_, c, args) {
+      var a = nums(args), rel = c === c.toLowerCase(), C = c.toUpperCase(), i = 0;
+      var ox = function () { return rel ? x : 0; }, oy = function () { return rel ? y : 0; };
+      if (C === "Z") {
+        to(sx, sy); subs.push(cur); cur = [[sx, sy]]; prev = C; return "";
+      }
+      do {
+        switch (C) {
+          case "M":
+            if (cur.length > 1) subs.push(cur);
+            x = a[i] + ox(); y = a[i + 1] + oy(); i += 2; sx = x; sy = y; cur = [[x, y]];
+            C = "L"; break;
+          case "L": to(a[i] + ox(), a[i + 1] + oy()); i += 2; break;
+          case "H": to(a[i] + ox(), y); i += 1; break;
+          case "V": to(x, a[i] + oy()); i += 1; break;
+          case "C": { var b = ox(), e = oy(); cubic(a[i] + b, a[i + 1] + e, a[i + 2] + b, a[i + 3] + e, a[i + 4] + b, a[i + 5] + e); i += 6; break; }
+          case "S": {
+            var b2 = ox(), e2 = oy(), r1x = x, r1y = y;
+            if (prev === "C" || prev === "S") { r1x = 2 * x - cx; r1y = 2 * y - cy; }
+            cubic(r1x, r1y, a[i] + b2, a[i + 1] + e2, a[i + 2] + b2, a[i + 3] + e2); i += 4; break;
+          }
+          case "Q": { var b3 = ox(), e3 = oy(); quad(a[i] + b3, a[i + 1] + e3, a[i + 2] + b3, a[i + 3] + e3); i += 4; break; }
+          case "T": {
+            var q1x = x, q1y = y;
+            if (prev === "Q" || prev === "T") { q1x = 2 * x - cx; q1y = 2 * y - cy; }
+            quad(q1x, q1y, a[i] + ox(), a[i + 1] + oy()); i += 2; break;
+          }
+          case "A": arc(a[i], a[i + 1], a[i + 2], a[i + 3] ? 1 : 0, a[i + 4] ? 1 : 0, a[i + 5] + ox(), a[i + 6] + oy()); i += 7; break;
+          default: i = a.length;
+        }
+        prev = C;
+      } while (i < a.length && !isNaN(a[i]));
+      return "";
+    });
+    if (cur.length) subs.push(cur);
+    return subs;
+  }
+  function shapePoints(el) {
+    var t = (el.localName || "").toLowerCase();
+    if (t === "path") return pathPoints(el.getAttribute("d"));
+    if (t === "line") return [[[num(el, "x1"), num(el, "y1")], [num(el, "x2"), num(el, "y2")]]];
+    if (t === "polyline" || t === "polygon") {
+      var p = nums(el.getAttribute("points") || ""), pts = [];
+      for (var i = 0; i + 1 < p.length; i += 2) pts.push([p[i], p[i + 1]]);
+      if (t === "polygon" && pts.length) pts.push(pts[0]);
+      return [pts];
+    }
+    if (t === "rect") {
+      var x = num(el, "x"), y = num(el, "y"), w = num(el, "width"), h = num(el, "height");
+      return [[[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]];
+    }
+    if (t === "circle" || t === "ellipse") {
+      var c = num(el, "cx"), d = num(el, "cy"), rx = t === "circle" ? num(el, "r") : num(el, "rx"), ry = t === "circle" ? rx : num(el, "ry"), out = [];
+      for (var k = 0; k <= 64; k++) out.push([c + rx * Math.cos(k * Math.PI / 32), d + ry * Math.sin(k * Math.PI / 32)]);
+      return [out];
+    }
+    return null;
+  }
+  function polyLength(subs) {
+    var L = 0;
+    subs.forEach(function (s) { for (var i = 1; i < s.length; i++) L += Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]); });
+    return L;
+  }
+  // ---- transforms ----
+  function parseTransform(s) {
+    var m = new DOMMatrix();
+    String(s || "").replace(/(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/g, function (_, f, args) {
+      var a = nums(args);
+      if (f === "matrix" && a.length >= 6) m = m.multiply(new DOMMatrix([a[0], a[1], a[2], a[3], a[4], a[5]]));
+      else if (f === "translate") m = m.translate(a[0] || 0, a[1] || 0);
+      else if (f === "scale") m = m.scale(a[0], a.length > 1 ? a[1] : a[0]);
+      else if (f === "rotate") m = a.length >= 3 ? m.translate(a[1], a[2]).rotate(a[0]).translate(-a[1], -a[2]) : m.rotate(a[0] || 0);
+      else if (f === "skewX") m = m.skewX(a[0] || 0);
+      else if (f === "skewY") m = m.skewY(a[0] || 0);
+      return "";
+    });
+    return m;
+  }
+  function own(el) { return el.getAttribute && el.getAttribute("transform") ? parseTransform(el.getAttribute("transform")) : new DOMMatrix(); }
+  function isSvgRoot(el) { return el && (el.localName || "").toLowerCase() === "svg"; }
+  function viewportMatrix(svg) {
+    var vb = nums(svg.getAttribute("viewBox") || "");
+    var r = svg.getBoundingClientRect ? svg.getBoundingClientRect() : { width: 0, height: 0 };
+    var w = r.width || num(svg, "width"), h = r.height || num(svg, "height");
+    var m = new DOMMatrix();
+    if (vb.length === 4 && vb[2] > 0 && vb[3] > 0 && w && h) {
+      var par = String(svg.getAttribute("preserveAspectRatio") || "xMidYMid meet");
+      var sx = w / vb[2], sy = h / vb[3];
+      if (!/^none/.test(par)) {
+        var s = /slice/.test(par) ? Math.max(sx, sy) : Math.min(sx, sy);
+        var tx = 0, ty = 0;
+        if (/xMid/.test(par) || par === "") tx = (w - vb[2] * s) / 2; else if (/xMax/.test(par)) tx = w - vb[2] * s;
+        if (/YMid/.test(par) || par === "") ty = (h - vb[3] * s) / 2; else if (/YMax/.test(par)) ty = h - vb[3] * s;
+        sx = sy = s;
+        m = m.translate(tx, ty);
+      }
+      m = m.scale(sx, sy).translate(-vb[0], -vb[1]);
+    }
+    return m;
+  }
+  // Element user space -> nearest viewport (the closest <svg>) user space.
+  function ctm(el) {
+    var m = own(el), p = el.parentNode;
+    while (p && p.nodeType === 1 && !isSvgRoot(p)) { m = own(p).multiply(m); p = p.parentNode; }
+    if (isSvgRoot(el)) return viewportMatrix(el);
+    if (p && isSvgRoot(p)) {
+      // Nested <svg>: its own x/y offset and viewBox mapping.
+      var outer = p.ownerSVGElement || (p.parentNode && p.parentNode.closest ? p.parentNode.closest("svg") : null);
+      if (outer) m = new DOMMatrix().translate(num(p, "x"), num(p, "y")).multiply(viewportMatrix(p)).multiply(m);
+    }
+    return m;
+  }
+  function screenCtm(el) {
+    var svg = isSvgRoot(el) ? el : (el.closest ? el.closest("svg") : null), m = new DOMMatrix();
+    if (!svg) return m;
+    var outer = svg;
+    while (outer.parentNode && outer.parentNode.closest && outer.parentNode.closest("svg")) outer = outer.parentNode.closest("svg");
+    var r = outer.getBoundingClientRect();
+    var toRoot = isSvgRoot(el) ? viewportMatrix(el) : ctm(el);
+    var s = svg;
+    while (s !== outer && s) {
+      var up = s.parentNode && s.parentNode.closest ? s.parentNode.closest("svg") : null;
+      if (!up) break;
+      var mm = own(s.parentNode), q = s.parentNode.parentNode;
+      while (q && q !== up) { mm = own(q).multiply(mm); q = q.parentNode; }
+      toRoot = mm.multiply(new DOMMatrix().translate(num(s, "x"), num(s, "y"))).multiply(toRoot);
+      s = up;
+    }
+    if (s === outer && !isSvgRoot(el)) toRoot = viewportMatrix(outer).multiply(toRoot);
+    return new DOMMatrix().translate(r.left, r.top).multiply(toRoot);
+  }
+  // ---- bounding boxes ----
+  var measureCtx = null;
+  function textWidth(el) {
+    var str = el.textContent || "";
+    if (!str) return 0;
+    try {
+      if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+      var cs = getComputedStyle(el);
+      measureCtx.font = (cs.fontStyle || "") + " " + (cs.fontWeight || "") + " " + (cs.fontSize || "16px") + " " + (cs.fontFamily || "sans-serif");
+      return measureCtx.measureText(str).width;
+    } catch (e) {
+      return str.length * 8;
+    }
+  }
+  function fontSize(el) {
+    try { return parseFloat(getComputedStyle(el).fontSize) || 16; } catch (e) { return 16; }
+  }
+  function box(el) {
+    var t = (el.localName || "").toLowerCase(), pts = shapePoints(el);
+    if (pts) {
+      var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      pts.forEach(function (s) { s.forEach(function (p) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }); });
+      return isFinite(x0) ? [x0, y0, x1, y1] : null;
+    }
+    if (t === "image" || t === "foreignobject" || t === "use" && el.hasAttribute("width")) {
+      var x = num(el, "x"), y = num(el, "y");
+      return [x, y, x + num(el, "width"), y + num(el, "height")];
+    }
+    if (t === "text" || t === "tspan" || t === "textpath") {
+      var fs = fontSize(el), tx = num(el, "x"), ty = num(el, "y"), w = textWidth(el);
+      var anchor = el.getAttribute("text-anchor") || "";
+      try { anchor = getComputedStyle(el).textAnchor || anchor; } catch (e) { /* ignore */ }
+      if (anchor === "middle") tx -= w / 2; else if (anchor === "end") tx -= w;
+      return w ? [tx, ty - fs * 0.8, tx + w, ty + fs * 0.2] : null;
+    }
+    var kids = el.children || [], u = null;
+    if (t === "use") {
+      var href = el.getAttribute("href") || el.getAttribute("xlink:href") || "";
+      var ref = href.charAt(0) === "#" ? document.getElementById(href.slice(1)) : null;
+      kids = ref ? [ref] : [];
+    }
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i], kt = (k.localName || "").toLowerCase();
+      if (/^(defs|clippath|mask|pattern|lineargradient|radialgradient|symbol|style|script|title|desc|metadata|marker|filter)$/.test(kt)) continue;
+      var b = box(k);
+      if (!b) continue;
+      var m = own(k);
+      if (t === "use") m = new DOMMatrix().translate(num(el, "x"), num(el, "y")).multiply(m);
+      var c = [[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]]].map(function (p) { var q = new DOMPoint(p[0], p[1]).matrixTransform(m); return [q.x, q.y]; });
+      for (var j = 0; j < 4; j++) {
+        if (!u) u = [c[j][0], c[j][1], c[j][0], c[j][1]];
+        u[0] = Math.min(u[0], c[j][0]); u[1] = Math.min(u[1], c[j][1]); u[2] = Math.max(u[2], c[j][0]); u[3] = Math.max(u[3], c[j][1]);
+      }
+    }
+    return u;
+  }
+  // Servo models some graphics elements (text, g, use, ...) as plain SVGElement, so the
+  // graphics methods also go on SVGElement when SVGGraphicsElement does not cover them.
+  [G, SVGElement.prototype].forEach(function (P) {
+    def(P, "getBBox", function () { var b = box(this); return b ? rect(b[0], b[1], b[2] - b[0], b[3] - b[1]) : rect(0, 0, 0, 0); });
+    def(P, "getCTM", function () { return ctm(this); });
+    def(P, "getScreenCTM", function () { return screenCtm(this); });
+  });
+  def(GEO, "getTotalLength", function () { var p = shapePoints(this); return p ? polyLength(p) : 0; });
+  def(GEO, "getPointAtLength", function (len) {
+    var subs = shapePoints(this) || [], left = Math.max(0, Number(len) || 0), last = null;
+    for (var s = 0; s < subs.length; s++) {
+      var pts = subs[s];
+      for (var i = 1; i < pts.length; i++) {
+        var d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+        if (left <= d && d > 0) {
+          var f = left / d;
+          return new DOMPoint(pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f);
+        }
+        left -= d; last = pts[i];
+      }
+      if (!last && pts.length) last = pts[0];
+    }
+    return last ? new DOMPoint(last[0], last[1]) : new DOMPoint(0, 0);
+  });
+  def(GEO, "isPointInFill", function (pt) {
+    var b = box(this);
+    return !!b && pt && pt.x >= b[0] && pt.x <= b[2] && pt.y >= b[1] && pt.y <= b[3];
+  });
+  if (window.SVGTextContentElement) {
+    def(SVGTextContentElement.prototype, "getComputedTextLength", function () { return textWidth(this); });
+    def(SVGTextContentElement.prototype, "getNumberOfChars", function () { return (this.textContent || "").length; });
+  } else {
+    def(SVGElement.prototype, "getComputedTextLength", function () { return textWidth(this); });
+  }
+  if (SVG) {
+    def(SVG, "createSVGPoint", function () { return new DOMPoint(0, 0); });
+    def(SVG, "createSVGMatrix", function () { return new DOMMatrix(); });
+    def(SVG, "createSVGRect", function () { return rect(0, 0, 0, 0); });
+    def(SVG, "createSVGNumber", function () { return { value: 0 }; });
+    def(SVG, "createSVGTransformFromMatrix", function (m) { return { type: 1, matrix: new DOMMatrix(m && [m.a, m.b, m.c, m.d, m.e, m.f]), angle: 0 }; });
+    var t0 = Date.now(), paused = null;
+    def(SVG, "pauseAnimations", function () { if (paused === null) paused = Date.now(); });
+    def(SVG, "unpauseAnimations", function () { if (paused !== null) { t0 += Date.now() - paused; paused = null; } });
+    def(SVG, "animationsPaused", function () { return paused !== null; });
+    def(SVG, "getCurrentTime", function () { return ((paused !== null ? paused : Date.now()) - t0) / 1000; });
+    def(SVG, "setCurrentTime", function (s) { t0 = (paused !== null ? paused : Date.now()) - (Number(s) || 0) * 1000; });
+    def(SVG, "forceRedraw", function () {});
+    def(SVG, "suspendRedraw", function () { return 0; });
+    def(SVG, "unsuspendRedraw", function () {});
+    def(SVG, "unsuspendRedrawAll", function () {});
+  }
+})();
+'''

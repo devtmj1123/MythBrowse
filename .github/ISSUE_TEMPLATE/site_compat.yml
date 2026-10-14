@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+
+name: Site compatibility
+description: A website that does not work or looks wrong in MythBrowse.
+labels: [compat]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Page address
+      description: Remove personal parts (tokens, account ids) from the address.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MythBrowse version
+      description: Settings > About.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What is broken?
+      description: What you expected, what you see; a screenshot helps. Does the compat panel (icon by the bookmark star) show findings?
+    validations:
+      required: true
+  - type: dropdown
+    id: ua
+    attributes:
+      label: Does another browser identity help? (Settings > Privacy & security > Browser identity)
+      options: ["Not tried", "Yes, Chrome identity works", "No difference"]

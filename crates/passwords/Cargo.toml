@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-passwords"
+description = "MythBrowse password manager (encrypted login store, origin matching, CSV) and Chrome / Edge import"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Key storage (Windows DPAPI / Secret Service / encrypted file) and the `Secret` wrapper.
+mythbrowse-ai.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+url.workspace = true
+zeroize = "1.8"
+# All already in Cargo.lock through Servo (no new crates, no C build).
+aes-gcm = "0.10"
+getrandom = { version = "0.2", features = ["std"] }
+base64 = "0.22"

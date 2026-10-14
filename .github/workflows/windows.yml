@@ -1,0 +1,251 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+#
+# Full Windows build of the open-source browser (compiles Servo, ~1.5 h cold):
+#   light     - the Linux light checks (ci.yml: DCO, gitleaks, cargo-deny, fmt, tests, clippy)
+#   windows   - release build of mythbrowse-shell (chat-only AI, no proprietary agent), packaged
+#               zip with ANGLE + licence files, app smoke test (launch, navigate, window controls,
+#               pointer mapping, a Myth chat against a local mock model, key store self-test, no
+#               API key in any log), unsigned MSI (WiX v5), unit tests on Windows
+#   msi-smoke - quiet install, launch, uninstall of that MSI on a fresh runner
+# Manual, or on main / release tags (Servo builds are expensive).
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  light:
+    uses: ./.github/workflows/ci.yml
+
+  windows:
+    name: Windows build (Servo, MSVC)
+    runs-on: windows-latest
+    timeout-minutes: 175
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_IDLE_TIMEOUT: "0"
+      SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+      # Short target dir: Servo's deep paths can exceed MAX_PATH on Windows.
+      CARGO_TARGET_DIR: C:\t
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+      # Settings > About shows the commit.
+      MYTHBROWSE_COMMIT: ${{ github.sha }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Servo build dependencies
+        run: |
+          # cmake and LLVM ship with the runner image; add Ninja.
+          choco install -y ninja
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Fetch MozTools 4.0 (only used if mozjs falls back to building SpiderMonkey from source)
+        run: |
+          $zip = "$env:RUNNER_TEMP\moztools-4.0.zip"
+          Invoke-WebRequest -Uri "https://github.com/servo/servo-build-deps/releases/download/msvc-deps/moztools-4.0.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\moztools"
+          $dir = (Get-ChildItem "$env:RUNNER_TEMP\moztools" -Directory | Select-Object -First 1).FullName
+          if (-not $dir) { $dir = "$env:RUNNER_TEMP\moztools" }
+          "MOZTOOLS_PATH=$dir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install toolchain (rust-toolchain.toml)
+        id: toolchain
+        run: |
+          rustup toolchain install
+          if ($LASTEXITCODE -ne 0) { rustup show }
+          rustc --version
+          "rust=$((rustc --version).Split(' ')[1])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+        with:
+          key: windows-release-rust${{ steps.toolchain.outputs.rust }}
+          cache-targets: "false"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        id: sccache
+        continue-on-error: true
+      - name: Enable sccache (falls back to plain rustc if it cannot start)
+        run: |
+          $ok = $false
+          if ("${{ steps.sccache.outcome }}" -eq "success") {
+            try {
+              sccache --start-server 2>$null
+              sccache --show-stats | Out-Null
+              $ok = ($LASTEXITCODE -eq 0)
+            } catch { $ok = $false }
+          }
+          if ($ok) {
+            "RUSTC_WRAPPER=sccache" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "sccache enabled"
+          } else {
+            "::warning::sccache unavailable - building without the compile cache"
+            try { sccache --stop-server 2>$null } catch { }
+          }
+          exit 0
+      - name: Build mythbrowse (release, open build)
+        run: cargo build --locked --release -p mythbrowse-shell
+      - name: sccache stats
+        if: always()
+        continue-on-error: true
+        run: |
+          try { sccache --show-stats } catch { "sccache not available" }
+          exit 0
+      - name: Third-party notices (licence files of every linked crate)
+        run: |
+          # cmd redirection keeps cargo's UTF-8 bytes unchanged.
+          cmd /c "cargo metadata --locked --format-version 1 > meta.json"
+          if ($LASTEXITCODE -ne 0) { throw "cargo metadata failed" }
+          python scripts/third-party-licenses.py meta.json --notices --out THIRD_PARTY_NOTICES.txt
+          if ($LASTEXITCODE -ne 0) { throw "notices generation failed" }
+          Get-Item THIRD_PARTY_NOTICES.txt | Format-Table Name, Length
+      - name: Package zip
+        run: |
+          $sha = $env:GITHUB_SHA.Substring(0, 8)
+          $name = "mythbrowse-oss-$sha-windows-x86_64"
+          $out = "dist\$name"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "$env:CARGO_TARGET_DIR\release\mythbrowse.exe" $out
+          # ANGLE (EGL/GLES over Direct3D 11): surfman loads libEGL.dll at run time.
+          $angle = Get-ChildItem "$env:CARGO_TARGET_DIR\release\build" -Directory -Filter "mozangle-*" |
+            Where-Object { Test-Path (Join-Path $_.FullName "out\libEGL.dll") } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $angle) { throw "libEGL.dll not found under $env:CARGO_TARGET_DIR\release\build\mozangle-*\out" }
+          foreach ($dll in "libEGL.dll", "libGLESv2.dll") { Copy-Item (Join-Path $angle.FullName "out\$dll") $out }
+          foreach ($dll in "vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll") {
+            $src = Join-Path $env:SystemRoot "System32\$dll"
+            if (Test-Path $src) { Copy-Item $src $out }
+          }
+          # Licence obligations: MPL-2.0 text, NOTICE, inventory and full third-party notices.
+          Copy-Item LICENSE, NOTICE, README.md, PRIVACY.md, THIRD_PARTY_LICENSES.md, THIRD_PARTY_NOTICES.txt $out
+          Get-ChildItem $out | Format-Table Name, Length
+          Compress-Archive -Path "$out\*" -DestinationPath "dist\$name.zip"
+          "ARTIFACT=dist\$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PKGDIR=$((Resolve-Path $out).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mythbrowse-oss-windows-x86_64
+          path: ${{ env.ARTIFACT }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: App smoke test (launch, navigate, window, pointer, Myth chat with a mock model)
+        id: smoke
+        timeout-minutes: 25
+        continue-on-error: true
+        run: |
+          Expand-Archive -Path $env:ARTIFACT -DestinationPath "$env:RUNNER_TEMP\app" -Force
+          ./ci/smoke-windows.ps1 -AppDir "$env:RUNNER_TEMP\app" -OutDir "$env:RUNNER_TEMP\smoke"
+          if ($LASTEXITCODE -ne 0) { throw "smoke test failed ($LASTEXITCODE)" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: smoke-windows
+          path: |
+            ${{ runner.temp }}/smoke/*.png
+            ${{ runner.temp }}/smoke/*.log
+            ${{ runner.temp }}/smoke/profile-*/logs/*.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Build MSI (WiX v5)
+        id: msi
+        timeout-minutes: 10
+        continue-on-error: true
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { throw "dotnet tool install wix failed" }
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          wix --version
+          wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
+          if ($LASTEXITCODE -ne 0) { throw "wix extension add failed" }
+          $m = Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1
+          if (-not $m) { throw "no version in Cargo.toml" }
+          $ver = $m.Matches[0].Groups[1].Value
+          $msi = "dist\MythBrowse-OSS-$ver-$($env:GITHUB_SHA.Substring(0, 8))-x64.msi"
+          wix build packaging/windows/mythbrowse.wxs -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext -d "Version=$ver" -d "SourceDir=$env:PKGDIR" -o $msi
+          if ($LASTEXITCODE -ne 0) { throw "wix build failed ($LASTEXITCODE)" }
+          Get-Item $msi | Format-Table Name, Length
+          "MSI=$((Resolve-Path $msi).Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - uses: actions/upload-artifact@v4
+        if: steps.msi.outcome == 'success'
+        continue-on-error: true
+        with:
+          name: mythbrowse-oss-windows-msi
+          path: ${{ env.MSI }}
+          if-no-files-found: error
+          retention-days: 7
+      - name: Test light crates on Windows (no Servo)
+        timeout-minutes: 20
+        run: >
+          cargo test --locked --no-fail-fast -p mythbrowse-ai -p mythbrowse-blocker -p mythbrowse-compat
+          -p mythbrowse-sync -p mythbrowse-storage -p mythbrowse-files -p mythbrowse-passwords
+          -p mythbrowse-notify -p mythbrowse-update
+      - name: Test engine pure modules (no Servo)
+        timeout-minutes: 15
+        run: cargo test --locked -p mythbrowse-engine --no-default-features
+      - name: App smoke result
+        if: always() && steps.smoke.outcome == 'failure'
+        run: |
+          "::error::app smoke test failed (see its log and the smoke-windows artifact)"
+          exit 1
+      - name: MSI result
+        if: always() && steps.msi.outcome == 'failure'
+        run: |
+          "::error::MSI build failed (see its log)"
+          exit 1
+
+  # Quiet install / launch / uninstall of the MSI the build job uploaded, on a fresh runner.
+  msi-smoke:
+    name: MSI smoke test (quiet install, launch, uninstall)
+    needs: windows
+    if: ${{ !cancelled() }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci
+      - uses: actions/download-artifact@v4
+        id: dl
+        continue-on-error: true
+        with:
+          name: mythbrowse-oss-windows-msi
+          path: ${{ runner.temp }}/msi-in
+      - name: No MSI to test
+        if: steps.dl.outcome != 'success'
+        run: |
+          "::error::no mythbrowse-oss-windows-msi artifact (the MSI build failed or was skipped)"
+          exit 1
+      - name: MSI smoke test
+        if: steps.dl.outcome == 'success'
+        timeout-minutes: 12
+        run: |
+          $msi = Get-ChildItem "$env:RUNNER_TEMP\msi-in" -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw "no .msi in the artifact" }
+          ./ci/msi-smoke-windows.ps1 -Msi $msi.FullName -OutDir "$env:RUNNER_TEMP\msi"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.dl.outcome == 'success'
+        continue-on-error: true
+        with:
+          name: msi-smoke-logs
+          path: ${{ runner.temp }}/msi/*.log
+          if-no-files-found: warn
+          retention-days: 7

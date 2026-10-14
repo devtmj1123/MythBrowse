@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+
+name: Feature request
+description: Suggest an improvement to the open-source browser.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+  - type: markdown
+    attributes:
+      value: |
+        Features that solve CAPTCHAs, forge browser fingerprints or evade bot detection will not be accepted.

@@ -1,0 +1,88 @@
+diff --git a/connector.rs b/connector.rs
+index 3adb53d..955445d 100644
+--- a/connector.rs
++++ b/connector.rs
+@@ -595,8 +595,13 @@ impl Service<Destination> for ProxyConnector {
+     fn call(&mut self, req: Destination) -> Self::Future {
+         match self.matcher.intercept(&req) {
+             Some(intercept) => Box::pin(
++                // MythBrowse patch: hyper-util's `Tunnel` sends `CONNECT host:443` whenever the
++                // destination has no explicit port, so a plain `http://host/` request through
++                // an HTTP proxy was tunnelled to port 443 and the server answered "400 The plain
++                // HTTP request was sent to HTTPS port" (or the connect failed). Give the tunnel
++                // the scheme's default port.
+                 Tunnel::new(intercept.uri().clone(), self.client.clone())
+-                    .call(req)
++                    .call(with_default_port(req))
+                     .map_err(|e| ConnectionError::ProxyError(format!("{e}"))),
+             ),
+             None => Box::pin(
+@@ -608,6 +613,68 @@ impl Service<Destination> for ProxyConnector {
+     }
+ }
+ 
++/// `dest` with its scheme's default port made explicit (80 for http/ws, 443 for https/wss),
++/// so a proxy `CONNECT` goes to the right port. Destinations that already name a port, have no
++/// authority, or cannot be rebuilt are returned unchanged.
++fn with_default_port(dest: Destination) -> Destination {
++    if dest.port().is_some() {
++        return dest;
++    }
++    let port = match dest.scheme_str() {
++        Some("http") | Some("ws") => 80,
++        Some("https") | Some("wss") => 443,
++        _ => return dest,
++    };
++    let Some(host) = dest.host() else {
++        return dest;
++    };
++    let authority = if host.contains(':') && !host.starts_with('[') {
++        format!("[{host}]:{port}")
++    } else {
++        format!("{host}:{port}")
++    };
++    let mut parts = dest.clone().into_parts();
++    match Authority::from_maybe_shared(authority) {
++        Ok(authority) => parts.authority = Some(authority),
++        Err(_) => return dest,
++    }
++    if parts.path_and_query.is_none() {
++        parts.path_and_query = Some(http::uri::PathAndQuery::from_static("/"));
++    }
++    Destination::from_parts(parts).unwrap_or(dest)
++}
++
++#[cfg(test)]
++mod default_port_tests {
++    use super::*;
++
++    fn d(s: &str) -> Destination {
++        s.parse().unwrap()
++    }
++
++    #[test]
++    fn plain_http_gets_port_80() {
++        assert_eq!(with_default_port(d("http://example.com/")).port_u16(), Some(80));
++        assert_eq!(with_default_port(d("http://example.com")).port_u16(), Some(80));
++        assert_eq!(with_default_port(d("ws://example.com/x")).port_u16(), Some(80));
++    }
++
++    #[test]
++    fn https_gets_port_443() {
++        assert_eq!(with_default_port(d("https://example.com/")).port_u16(), Some(443));
++        assert_eq!(with_default_port(d("wss://example.com/")).port_u16(), Some(443));
++    }
++
++    #[test]
++    fn explicit_port_and_host_are_kept() {
++        let x = with_default_port(d("http://example.com:8080/a?b"));
++        assert_eq!(x.port_u16(), Some(8080));
++        assert_eq!(x.host(), Some("example.com"));
++        assert_eq!(with_default_port(d("http://[::1]/")).host(), Some("[::1]"));
++        assert_eq!(with_default_port(d("http://[::1]/")).port_u16(), Some(80));
++    }
++}
++
+ pub type ServoClient = Client<InstrumentedConnector<ProxyConnector>, BoxedBody>;
+ 
+ pub fn create_http_client(tls_config: TlsConfig) -> ServoClient {

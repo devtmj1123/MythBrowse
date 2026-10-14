@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+#
+# Light checks on Linux (no Servo build): DCO sign-off, secret scan, licence / source policy
+# (cargo-deny), formatting, unit tests and clippy of the crates that build without Servo.
+# Also called by windows.yml so one dispatch runs everything.
+name: CI (Linux, light)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  LIGHT: >-
+    -p mythbrowse-ai -p mythbrowse-blocker -p mythbrowse-compat -p mythbrowse-storage
+    -p mythbrowse-sync -p mythbrowse-files -p mythbrowse-notify -p mythbrowse-passwords
+    -p mythbrowse-update
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit is signed off by its author (CONTRIBUTING.md)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE" ]; then python3 scripts/check-dco.py "$BASE..HEAD"; else python3 scripts/check-dco.py HEAD; fi
+
+  secrets:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks 8.21.2 (checksum-verified binary), history and working tree
+        run: |
+          set -euo pipefail
+          v=8.21.2
+          curl -sSfL -o "$RUNNER_TEMP/gl.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v$v/gitleaks_${v}_linux_x64.tar.gz"
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  $RUNNER_TEMP/gl.tgz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/gl.tgz" -C "$RUNNER_TEMP" gitleaks
+          # History of the checked-out commit (fetch-depth 0 also fetches every other branch;
+          # each branch and pull request is scanned by its own run).
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose --exit-code 1 --log-opts="HEAD" .
+          "$RUNNER_TEMP/gitleaks" dir --redact --exit-code 1 --max-target-megabytes 5 .
+
+  deny:
+    name: licences + sources (cargo-deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses bans sources
+
+  light:
+    name: fmt + tests + clippy (light crates)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        continue-on-error: true
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: fmt
+        run: cargo fmt --all -- --check
+      - name: tests (light crates)
+        run: cargo test --locked $LIGHT
+      - name: tests (engine without Servo)
+        run: cargo test --locked -p mythbrowse-engine --no-default-features
+      - name: clippy
+        run: |
+          cargo clippy --locked --all-targets $LIGHT -- -D warnings
+          cargo clippy --locked --all-targets -p mythbrowse-engine --no-default-features -- -D warnings
+      - name: UI scripts parse
+        run: for f in ui/*.js ui/design/*.js; do node --check "$f" || exit 1; done

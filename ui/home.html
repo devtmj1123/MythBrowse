@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- New tab, laid out like the MythDesk home screen on the MythDesk sky: date and time on the
+     left, glass cards with real browsing data on the right, Myth's status top right and the
+     Myth composer at the bottom (a new tab is a new conversation). Served from the internal
+     origin; the conversation is ui/chat.js (/api/chat_*, model settings /api/ai_*), cards use
+     /api/history and /api/bookmarks. The glass sidebar on the left lists saved chats
+     (ui/chatlist.js: /api/chat_list, chat_open, chat_rename, chat_pin, chat_delete). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mb-token" content="{{MB_TOKEN}}">
+  <meta name="mb-theme-hour" content="{{MB_THEME_HOUR}}">
+  <meta name="mb-glass" content="{{MB_GLASS}}">
+  <meta name="mb-transparency" content="{{MB_TRANSPARENCY}}">
+  <meta name="mb-reduce-transparency" content="{{MB_REDUCE_TRANSPARENCY}}">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New tab</title>
+  <link rel="stylesheet" href="design/tokens.css">
+  <link rel="stylesheet" href="home.css">
+  <script src="design/theme.js"></script>
+  <script src="design/icons.js"></script>
+  <script src="design/motion.js"></script>
+  <script src="design/select.js"></script>
+</head>
+<body class="sky-page">
+  <canvas id="sky" data-above="88" data-bleed="12" aria-hidden="true"></canvas>
+
+  <header class="statusbar-left">
+    <button id="side-btn" class="state icon-only" type="button" title="Chats" aria-label="Show chats" aria-controls="sidebar" aria-expanded="false"><span data-icon="sidebar" data-size="17" data-role="soft"></span></button>
+    <button id="new-btn" class="state icon-only" type="button" title="New chat" aria-label="New chat"><span data-icon="plus" data-size="17" data-role="soft"></span></button>
+  </header>
+
+  <!-- Saved chats: grouped Pinned / Today / This week / Earlier, search, pin, delete, rename
+       (double-click). Continuing an old chat loads it into this tab. -->
+  <aside id="sidebar" class="sidebar" data-glass="p" aria-label="Chats" hidden>
+    <div class="side-head">
+      <div class="w-title"><span data-icon="chat" data-size="15" data-role="soft"></span>Chats</div>
+      <button id="side-new" class="side-new" type="button" title="New chat"><span data-icon="plus" data-size="14" data-role="soft"></span><span>New</span></button>
+      <button id="side-close" class="tb-icon" type="button" aria-label="Hide chats"><span data-icon="close" data-size="14" data-role="soft"></span></button>
+    </div>
+    <label id="side-search" class="search-box field side-search">
+      <span data-icon="search" data-size="14" data-role="soft"></span>
+      <input id="side-filter" type="search" placeholder="Search chats" aria-label="Search chats">
+    </label>
+    <p id="side-private" class="side-private" hidden><span data-icon="eye" data-size="14" data-role="soft"></span>Private window: chats are not saved.</p>
+    <div id="side-list" class="side-list"></div>
+    <a class="card-foot side-foot" href="library.html#chats"><span>All history</span><kbd>Ctrl+H</kbd></a>
+  </aside>
+
+  <header class="statusbar">
+    <button id="state-pill" class="state" data-glass="c" type="button" title="Model settings"><span class="pulse"></span><span>Myth</span><span class="sep"></span><span id="state-text">Model</span><span data-icon="settings" data-size="15" data-role="soft"></span></button>
+  </header>
+
+  <main class="home">
+   <div class="home-inner">
+    <section class="lead">
+      <div id="home-date" class="nt-date"></div>
+      <div id="home-time" class="big-time">--:--</div>
+    </section>
+
+    <section class="side">
+      <article class="glass card" data-glass="p">
+        <div class="w-title"><span data-icon="clock" data-size="15" data-role="soft"></span>Recent</div>
+        <ul id="recent" class="links"></ul>
+        <a class="card-foot" href="library.html"><span>All history</span><kbd>Ctrl+H</kbd></a>
+      </article>
+      <article id="bookmarks-card" class="glass card" data-glass="p" hidden>
+        <div class="w-title"><span data-icon="star" data-size="15" data-role="soft"></span>Bookmarks</div>
+        <ul id="bookmarks" class="links"></ul>
+      </article>
+    </section>
+   </div>
+  </main>
+
+  <section id="conversation" class="messages" aria-live="polite"></section>
+
+  <!-- Model settings (approved liquid-glass sheet): API key | Ollama, Base URL, Check
+       connection, the model as a radio list (Ollama /api/tags or /v1/models; a text field when
+       the server lists none), page actions, Cancel | Save. The API key goes to the shell in a
+       request header and is stored with the OS (DPAPI on Windows); the page never sees it
+       again. Appearance (Transparency slider + Reduce transparency) previews live while it
+       moves; Save keeps it, Cancel / Esc / the backdrop put it back. Motion lives in History &
+       settings (library.html). -->
+  <div id="settings" class="sheet-wrap" hidden>
+    <section class="sheet glass" data-glass="f" role="dialog" aria-labelledby="set-title" tabindex="-1">
+      <header class="sheet-head">
+        <h2 id="set-title"><span data-icon="key" data-size="18" data-role="icon"></span>Model</h2>
+        <button id="set-close" class="tb-icon" type="button" aria-label="Close"><span data-icon="close" data-size="16" data-role="soft"></span></button>
+      </header>
+      <div class="seg kind-seg" role="tablist">
+        <button id="kind-openai" class="seg-btn" type="button">API key</button>
+        <button id="kind-ollama" class="seg-btn" type="button">Ollama</button>
+      </div>
+      <div class="set-row"><label class="set-label" for="set-url">Base URL</label>
+        <div class="inp"><span data-icon="globe" data-size="16" data-role="soft"></span>
+          <input id="set-url" type="text" spellcheck="false" autocomplete="off"></div></div>
+      <div id="key-row" class="set-row" hidden><label class="set-label" for="set-key">API key</label>
+        <div class="inp"><span data-icon="key" data-size="16" data-role="soft"></span>
+          <input id="set-key" type="password" spellcheck="false" autocomplete="off"></div>
+        <span id="key-note" class="soft small key-note"></span></div>
+      <div class="check-row">
+        <button id="set-test" class="pill-btn sm" type="button"><span data-icon="reload" data-size="14" data-role="icon"></span><span>Check connection</span></button>
+        <p id="set-msg" class="set-msg"></p>
+      </div>
+      <div class="set-row"><span class="set-label">Model</span>
+        <div id="models" class="models" role="radiogroup" aria-label="Model" hidden></div>
+        <div id="model-inp" class="inp"><input id="set-model" type="text" spellcheck="false" autocomplete="off" aria-label="Model name"></div></div>
+      <div class="setrow"><span>Send page screenshots to models that can see images (passwords are blacked out; never saved)</span>
+        <button id="set-shots" class="sw" type="button" role="switch" aria-checked="true" aria-label="Send page screenshots"><b></b><i></i></button></div>
+      <div class="setrow"><span>This model can see images</span>
+        <select id="set-vision" aria-label="Vision">
+          <option value="auto">Detect</option><option value="on">Yes</option><option value="off">No</option>
+        </select></div>
+      <div class="set-row appear"><span class="set-label" id="appear-label">Appearance</span>
+        <div class="appear-box">
+          <div class="appear-line"><span>Transparency</span><span id="tr-val" class="tr-val">Default</span></div>
+          <div id="tr-slider" class="slider" role="slider" tabindex="0" aria-labelledby="appear-label" aria-valuetext="Default"></div>
+          <div class="appear-ends"><span>Solid</span><span>Clear</span></div>
+        </div>
+        <div class="setrow"><span>Reduce transparency</span>
+          <button id="set-reduce" class="sw" type="button" role="switch" aria-checked="false" aria-label="Reduce transparency"><b></b><i></i></button></div></div>
+      <footer class="sheet-foot">
+        <button id="set-cancel" class="pill-btn" type="button">Cancel</button>
+        <button id="set-save" class="pill-btn navy" type="button">Save</button>
+      </footer>
+    </section>
+  </div>
+
+  <!-- First-run welcome (ui/onboarding.js): what MythBrowse is, Myth's model (opens the Model
+       sheet above, or later), importing from another browser, the look, privacy. Shown once
+       (profile pref "onboarded"); Settings > About > "Show welcome" opens home.html#welcome.
+       Same strong glass sheet, controls and motion as the Model sheet. -->
+  <div id="welcome" class="sheet-wrap" hidden>
+    <section class="sheet glass welcome" data-glass="f" role="dialog" aria-labelledby="wl-title" tabindex="-1">
+      <header class="sheet-head wl-head">
+        <span class="wl-steps" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <button id="wl-skip" class="wl-skip" type="button">Skip</button>
+      </header>
+
+      <div class="wl-step" data-step="0">
+        <img class="wl-logo" src="design/logo.svg" alt="" width="64" height="64">
+        <h2 id="wl-title" class="wl-title">Welcome to MythBrowse</h2>
+        <p class="wl-lead">A browser with Myth built in. Ask in the address bar or on a new tab: Myth reads pages for you and, with your OK, acts on them.</p>
+        <ul class="wl-points">
+          <li><span data-icon="globe" data-size="18" data-role="soft"></span><div><b>Browse</b><span>Pages float on a living sky. Site fixes step in when a page breaks.</span></div></li>
+          <li><span data-icon="chat" data-size="18" data-role="soft"></span><div><b>Your model</b><span>Myth runs on an API key you own or on Ollama on this PC.</span></div></li>
+          <li><span data-icon="shield" data-size="18" data-role="soft"></span><div><b>You decide</b><span>Myth asks before it sends, signs in, buys or deletes anything.</span></div></li>
+        </ul>
+      </div>
+
+      <div class="wl-step" data-step="1" hidden>
+        <h2 class="wl-title">Set up Myth</h2>
+        <p class="wl-lead">Choose where Myth's model runs. You can change it any time from the Myth pill.</p>
+        <div class="wl-choices">
+          <button id="wl-openai" class="wl-choice" type="button">
+            <span data-icon="key" data-size="20" data-role="soft"></span>
+            <b>API key</b><span>OpenAI or any OpenAI-compatible service. The key stays in Windows' secure storage.</span>
+          </button>
+          <button id="wl-ollama" class="wl-choice" type="button">
+            <span data-icon="folder" data-size="20" data-role="soft"></span>
+            <b>Ollama</b><span>Models on this PC. Nothing leaves it.</span>
+          </button>
+        </div>
+        <p id="wl-model" class="wl-note" hidden><span class="dot"></span><span id="wl-model-text"></span></p>
+      </div>
+
+      <div class="wl-step" data-step="2" hidden>
+        <h2 class="wl-title">Bring your things</h2>
+        <p class="wl-lead">Import bookmarks, history and passwords from Chrome or Edge, or a password file. Optional, and it can wait.</p>
+        <div class="wl-card">
+          <span data-icon="download" data-size="20" data-role="soft"></span>
+          <div><b>Import from another browser</b><span>Opens Passwords &amp; import in this tab.</span></div>
+          <button id="wl-import" class="pill-btn sm" type="button">Import</button>
+        </div>
+      </div>
+
+      <div class="wl-step" data-step="3" hidden>
+        <h2 class="wl-title">Make it yours</h2>
+        <p class="wl-lead">The sky and colours follow the time of day. Pick how see-through the glass is and how much things move.</p>
+        <div class="set-row"><span class="set-label">Glass</span>
+          <div id="wl-glass" class="seg" role="tablist">
+            <button class="seg-btn" type="button" data-v="25">More solid</button>
+            <button class="seg-btn" type="button" data-v="50">Default</button>
+            <button class="seg-btn" type="button" data-v="75">Clearer</button>
+          </div></div>
+        <div class="set-row"><span class="set-label">Motion</span>
+          <div id="wl-motion" class="seg" role="tablist">
+            <button class="seg-btn" type="button" data-m="full">Full</button>
+            <button class="seg-btn" type="button" data-m="reduced">Reduced</button>
+            <button class="seg-btn" type="button" data-m="off">Off</button>
+          </div></div>
+      </div>
+
+      <div class="wl-step" data-step="4" hidden>
+        <h2 class="wl-title">Your data stays here</h2>
+        <ul class="wl-points">
+          <li><span data-icon="lock" data-size="18" data-role="soft"></span><div><b>On this PC</b><span>History, chats and passwords are kept on this computer. Passwords are encrypted by Windows.</span></div></li>
+          <li><span data-icon="chat" data-size="18" data-role="soft"></span><div><b>Only to your model</b><span>Myth sends your messages, and pages it reads for you, only to the model you set up.</span></div></li>
+          <li><span data-icon="search" data-size="18" data-role="soft"></span><div><b>Search suggestions</b><span>Words you type in the address bar (never addresses) go to DuckDuckGo for suggestions. Turn it off in Settings.</span></div></li>
+          <li><span data-icon="eye" data-size="18" data-role="soft"></span><div><b>No account, no tracking</b><span>No sign-in, no ads, no usage data sent to JustMyth.</span></div></li>
+        </ul>
+      </div>
+
+      <footer class="sheet-foot">
+        <button id="wl-back" class="pill-btn" type="button">Back</button>
+        <button id="wl-next" class="pill-btn navy" type="button">Get started</button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="bottom">
+    <div id="background" class="background glass" data-glass="p" hidden>
+      <span data-icon="globe" data-size="15" data-role="soft"></span>
+      <span id="bg-text"></span>
+      <a id="bg-open" href="tasks.html">Tasks</a>
+    </div>
+    <form id="composer" class="composer" data-glass="p" autocomplete="off">
+      <button id="model-pill" class="model-pill" type="button" title="Model settings"><span id="model-label" class="mlabel">Model</span><span data-icon="settings" data-size="14" data-role="soft"></span></button>
+      <input id="prompt" type="text" placeholder="Message Myth" aria-label="Message Myth">
+      <button id="send" class="send" type="submit" title="Send (Enter)" aria-label="Send">
+        <span data-icon="send" data-size="18" data-role="white"></span>
+      </button>
+    </form>
+  </div>
+  <script src="design/sky.js"></script>
+  <script src="chat.js"></script>
+  <script src="chatlist.js"></script>
+  <script src="home.js"></script>
+  <script src="onboarding.js"></script>
+</body>
+</html>

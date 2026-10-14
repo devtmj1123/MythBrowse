@@ -1,0 +1,347 @@
+diff --git a/cookie.rs b/cookie.rs
+index 13e97a6..ae5fd65 100644
+--- a/cookie.rs
++++ b/cookie.rs
+@@ -339,10 +339,10 @@ impl ServoCookie {
+     /// <http://tools.ietf.org/html/rfc6265#section-5.4> step 1
+     pub fn appropriate_for_url(&self, url: &ServoUrl, source: CookieSource) -> bool {
+         if log_enabled!(Level::Debug) {
++            // MythBrowse (servo-net-0002): never log cookie values.
+             debug!(
+-                " === SENT COOKIE : {} {} {:?} {:?}",
++                " === SENT COOKIE : {} {:?} {:?}",
+                 self.cookie.name(),
+-                self.cookie.value(),
+                 self.cookie.domain(),
+                 self.cookie.path()
+             );
+diff --git a/cookie_storage.rs b/cookie_storage.rs
+index 55b7bc1..5c68321 100644
+--- a/cookie_storage.rs
++++ b/cookie_storage.rs
+@@ -145,6 +145,13 @@ impl CookieStorage {
+ 
+     // http://tools.ietf.org/html/rfc6265#section-5.3
+     pub fn push(&mut self, mut cookie: ServoCookie, url: &ServoUrl, source: CookieSource) {
++        // MythBrowse (servo-net-0002): a site the user blocked stores no cookies.
++        if crate::mythbrowse_cookies::is_blocked(&reg_host(
++            cookie.cookie.domain().as_ref().unwrap_or(&""),
++        )) {
++            return;
++        }
++
+         // https://www.ietf.org/id/draft-ietf-httpbis-cookie-alone-01.txt Step 1
+         if cookie.cookie.secure().unwrap_or(false) && !url.is_secure_scheme() {
+             return;
+@@ -233,7 +240,8 @@ impl CookieStorage {
+         // Serialize the cookie-list into a cookie-string by processing each cookie in the cookie-list in order
+         let result = cookie_list.fold("".to_owned(), reducer);
+ 
+-        info!(" === COOKIES SENT: {}", result);
++        // MythBrowse (servo-net-0002): never log cookie values.
++        info!(" === COOKIES SENT: {} bytes", result.len());
+         match result.len() {
+             0 => None,
+             _ => Some(result),
+@@ -267,11 +275,13 @@ impl CookieStorage {
+         source: CookieSource,
+     ) -> impl Iterator<Item = cookie::Cookie<'static>> + 'a {
+         let domain = reg_host(url.host_str().unwrap_or(""));
++        // MythBrowse (servo-net-0002): a blocked site sends no cookies.
++        let blocked = crate::mythbrowse_cookies::is_blocked(&domain);
+         let cookies = self.cookies_map.entry(domain).or_default();
+ 
+         cookies
+             .iter_mut()
+-            .filter(move |c| c.appropriate_for_url(url, source))
++            .filter(move |c| !blocked && c.appropriate_for_url(url, source))
+             .sorted_by(|a: &&mut ServoCookie, b: &&mut ServoCookie| {
+                 // The user agent SHOULD sort the cookie-list
+                 CookieStorage::cookie_comparator(a, b)
+@@ -283,6 +293,55 @@ impl CookieStorage {
+             })
+     }
+ 
++    /// MythBrowse (servo-net-0002): every unexpired cookie stored for the registrable domain
++    /// `site` (all hosts, paths and flags), values redacted (`mythbrowse_cookies::meta_value`).
++    /// Last-access times are not touched.
++    pub fn site_cookies_redacted(&mut self, site: &str) -> Vec<Cookie<'static>> {
++        let domain = reg_host(site);
++        let Some(cookies) = self.cookies_map.get(&domain) else {
++            return Vec::new();
++        };
++        cookies
++            .iter()
++            .filter(|c| !is_cookie_expired(c))
++            .map(|c| {
++                let mut out = c.cookie.clone();
++                out.set_value(crate::mythbrowse_cookies::meta_value(
++                    c.cookie.name(),
++                    c.cookie.value(),
++                    c.host_only,
++                ));
++                out
++            })
++            .collect()
++    }
++
++    /// MythBrowse (servo-net-0002): remove the cookie with exactly this name, domain and path
++    /// (whatever its flags). Returns whether one was removed.
++    pub fn delete_cookie_exact(&mut self, domain: &str, path: &str, name: &str) -> bool {
++        let domain = domain.trim_start_matches('.').to_ascii_lowercase();
++        let key = reg_host(&domain);
++        let Entry::Occupied(mut entry) = self.cookies_map.entry(key) else {
++            return false;
++        };
++        let cookies = entry.get_mut();
++        let before = cookies.len();
++        cookies.retain(|c| {
++            !(c.cookie.name() == name &&
++                c.cookie.path().unwrap_or("") == path &&
++                c.cookie
++                    .domain()
++                    .unwrap_or("")
++                    .trim_start_matches('.')
++                    .eq_ignore_ascii_case(&domain))
++        });
++        let removed = cookies.len() != before;
++        if cookies.is_empty() {
++            entry.remove_entry();
++        }
++        removed
++    }
++
+     pub fn cookie_site_descriptors(&self) -> Vec<SiteDescriptor> {
+         self.cookies_map
+             .keys()
+@@ -343,3 +402,64 @@ fn get_oldest_accessed(
+     }
+     oldest_accessed
+ }
++
++#[cfg(test)]
++mod mythbrowse_tests {
++    use super::*;
++
++    fn add(jar: &mut CookieStorage, url: &str, set_cookie: &str) {
++        let url = ServoUrl::parse(url).unwrap();
++        let c = ServoCookie::from_cookie_string(set_cookie, &url, CookieSource::HTTP).unwrap();
++        jar.push(c, &url, CookieSource::HTTP);
++    }
++
++    #[test]
++    fn redacted_listing_and_exact_delete() {
++        let mut jar = CookieStorage::new(150);
++        add(&mut jar, "https://www.example.com/a/b", "sid=secret; HttpOnly; Secure");
++        add(&mut jar, "https://example.com/", "pref=dark; Domain=example.com; Path=/");
++        add(&mut jar, "https://mail.example.com/", "x=1; Path=/inbox");
++        add(&mut jar, "https://other.org/", "o=1");
++
++        let all = jar.site_cookies_redacted("example.com");
++        assert_eq!(all.len(), 3);
++        assert!(all.iter().all(|c| c.value().starts_with("mbmeta.")));
++        assert!(!all.iter().any(|c| c.value().contains("secret")));
++        let sid = all.iter().find(|c| c.name() == "sid").unwrap();
++        assert_eq!(sid.value(), "mbmeta.9.1");
++        assert_eq!(sid.domain(), Some("www.example.com"));
++        assert_eq!(sid.path(), Some("/a"));
++        assert_eq!(
++            all.iter().find(|c| c.name() == "pref").unwrap().value(),
++            "mbmeta.8.0"
++        );
++
++        // Wrong path or domain removes nothing; the exact triple removes one, HttpOnly too.
++        assert!(!jar.delete_cookie_exact("www.example.com", "/", "sid"));
++        assert!(!jar.delete_cookie_exact("example.com", "/a", "sid"));
++        assert!(jar.delete_cookie_exact("www.example.com", "/a", "sid"));
++        assert!(jar.delete_cookie_exact(".example.com", "/", "pref"));
++        let left = jar.site_cookies_redacted("example.com");
++        assert_eq!(left.len(), 1);
++        assert_eq!(left[0].name(), "x");
++        assert_eq!(jar.site_cookies_redacted("other.org").len(), 1);
++        assert!(jar.delete_cookie_exact("mail.example.com", "/inbox", "x"));
++        assert!(jar.site_cookies_redacted("example.com").is_empty());
++    }
++
++    #[test]
++    fn blocked_site_stores_and_sends_nothing() {
++        let mut jar = CookieStorage::new(150);
++        add(&mut jar, "https://tracker.test/", "keep=1");
++        crate::mythbrowse_cookies::set_blocked("tracker.test", true);
++        add(&mut jar, "https://ads.tracker.test/", "t=1");
++        let url = ServoUrl::parse("https://tracker.test/").unwrap();
++        assert_eq!(jar.cookies_for_url(&url, CookieSource::HTTP), None);
++        crate::mythbrowse_cookies::set_blocked("tracker.test", false);
++        // Stored before the block, not after it.
++        assert_eq!(
++            jar.cookies_for_url(&url, CookieSource::HTTP).as_deref(),
++            Some("keep=1")
++        );
++    }
++}
+diff --git a/lib.rs b/lib.rs
+index cc013f0..322393a 100644
+--- a/lib.rs
++++ b/lib.rs
+@@ -17,6 +17,8 @@ pub mod http_cache;
+ pub mod http_loader;
+ pub mod image_cache;
+ pub mod local_directory_listing;
++/// MythBrowse cookie management hooks (vendored patch servo-net-0002).
++pub mod mythbrowse_cookies;
+ pub mod protocols;
+ pub mod request_interceptor;
+ pub mod resource_thread;
+diff --git a/mythbrowse_cookies.rs b/mythbrowse_cookies.rs
+new file mode 100644
+index 0000000..c1d89fd
+--- /dev/null
++++ b/mythbrowse_cookies.rs
+@@ -0,0 +1,80 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
++
++//! MythBrowse cookie management hooks (vendored patch servo-net-0002).
++//!
++//! Servo 0.1.4's embedder API (`SiteDataManager`) can list sites, clear a site's cookies and
++//! read the cookies a URL would get, but it cannot enumerate every cookie of a site
++//! (sub-domain host-only cookies, other paths), delete one cookie, or keep a site from
++//! storing cookies. Adding `CoreResourceMsg` variants would mean patching servo-net-traits and
++//! servo too, so the embedder reaches these through the two messages it already has, with
++//! URLs in schemes no web page can produce (they are never fetched or navigated):
++//!
++//! * `GetCookiesForUrl(mythbrowse-cookie-jar://<site>/)`: every unexpired cookie stored for
++//!   the registrable domain `<site>`, any host / path / flag, with its **value redacted** to
++//!   `mbmeta.<name+value bytes>.<host-only 1|0>` so values never leave the cookie jar
++//!   through this path. Last-access times are not touched.
++//! * `SetCookieForUrl(mythbrowse-cookie-delete://<site>/, cookie)`: remove the stored
++//!   cookie with exactly that name, domain and path (HttpOnly / Secure included).
++//! * `SetCookieForUrl(mythbrowse-cookie-block://<site>/, cookie "block=1|0")`: add / remove
++//!   `<site>` from the blocked set. A blocked site's cookies are neither stored nor sent.
++//!
++//! Third-party cookie blocking is not here: the cookie set / read paths (HTTP responses,
++//! `document.cookie`, CookieStore) do not know the top-level site of the request.
++
++use std::sync::RwLock;
++
++pub const JAR_SCHEME: &str = "mythbrowse-cookie-jar";
++pub const DELETE_SCHEME: &str = "mythbrowse-cookie-delete";
++pub const BLOCK_SCHEME: &str = "mythbrowse-cookie-block";
++/// Prefix of the redacted value in `JAR_SCHEME` answers.
++pub const META_PREFIX: &str = "mbmeta.";
++
++static BLOCKED: RwLock<Vec<String>> = RwLock::new(Vec::new());
++
++/// Add (`on`) or remove a registrable domain (lowercase) from the blocked set.
++pub fn set_blocked(site: &str, on: bool) {
++    let site = site.to_ascii_lowercase();
++    let mut b = BLOCKED.write().unwrap_or_else(|p| p.into_inner());
++    b.retain(|s| *s != site);
++    if on && !site.is_empty() {
++        b.push(site);
++    }
++}
++
++/// Whether cookies for the registrable domain `site` (as the cookie jar keys it) are blocked.
++pub fn is_blocked(site: &str) -> bool {
++    let b = BLOCKED.read().unwrap_or_else(|p| p.into_inner());
++    !b.is_empty() && b.iter().any(|s| s.eq_ignore_ascii_case(site))
++}
++
++/// The redacted value for a cookie: its size in bytes (name + value) and host-only flag.
++pub fn meta_value(name: &str, value: &str, host_only: bool) -> String {
++    format!(
++        "{META_PREFIX}{}.{}",
++        name.len() + value.len(),
++        if host_only { 1 } else { 0 }
++    )
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn blocked_set() {
++        set_blocked("Blocked-Set.TEST", true);
++        assert!(is_blocked("blocked-set.test"));
++        assert!(!is_blocked("other.com"));
++        set_blocked("blocked-set.test", true);
++        set_blocked("blocked-set.test", false);
++        assert!(!is_blocked("blocked-set.test"));
++    }
++
++    #[test]
++    fn meta() {
++        assert_eq!(meta_value("sid", "abcd", true), "mbmeta.7.1");
++        assert_eq!(meta_value("", "", false), "mbmeta.0.0");
++    }
++}
+diff --git a/resource_thread.rs b/resource_thread.rs
+index 358fd7f..5ef20d3 100644
+--- a/resource_thread.rs
++++ b/resource_thread.rs
+@@ -56,6 +56,7 @@ use crate::connector::{
+ };
+ use crate::cookie::ServoCookie;
+ use crate::cookie_storage::CookieStorage;
++use crate::mythbrowse_cookies;
+ use crate::embedder::NetToEmbedderMsg;
+ use crate::fetch::cors_cache::CorsCache;
+ use crate::fetch::fetch_params::{FetchParams, SharedPreloadedResources};
+@@ -458,6 +459,34 @@ impl ResourceChannelManager {
+                     protocols,
+                 )
+             },
++            // MythBrowse (servo-net-0002): embedder-only delete-one / block, see
++            // `mythbrowse_cookies`. These schemes never come from a page.
++            CoreResourceMsg::SetCookieForUrl(request, cookie, _source, sender)
++                if request.scheme() == mythbrowse_cookies::DELETE_SCHEME ||
++                    request.scheme() == mythbrowse_cookies::BLOCK_SCHEME =>
++            {
++                let cookie = cookie.into_inner();
++                if request.scheme() == mythbrowse_cookies::DELETE_SCHEME {
++                    http_state.cookie_jar.write().delete_cookie_exact(
++                        cookie.domain().unwrap_or(""),
++                        cookie.path().unwrap_or("/"),
++                        cookie.name(),
++                    );
++                } else {
++                    let site = request.host_str().unwrap_or("");
++                    let on = cookie.value() == "1";
++                    mythbrowse_cookies::set_blocked(site, on);
++                    if on {
++                        http_state
++                            .cookie_jar
++                            .write()
++                            .delete_cookies_for_sites(&vec![site.to_ascii_lowercase()]);
++                    }
++                }
++                if let Some(sender) = sender {
++                    let _ = sender.send(());
++                }
++            },
+             CoreResourceMsg::SetCookieForUrl(request, cookie, source, sender) => {
+                 self.resource_manager.set_cookie_for_url(
+                     &request,
+@@ -495,6 +524,19 @@ impl ResourceChannelManager {
+                     .send(cookie_jar.cookies_for_url(&url, source))
+                     .unwrap();
+             },
++            // MythBrowse (servo-net-0002): every cookie of a site, values redacted.
++            CoreResourceMsg::GetCookiesForUrl(url, consumer, _source)
++                if url.scheme() == mythbrowse_cookies::JAR_SCHEME =>
++            {
++                let cookies = http_state
++                    .cookie_jar
++                    .write()
++                    .site_cookies_redacted(url.host_str().unwrap_or(""))
++                    .into_iter()
++                    .map(Serde)
++                    .collect();
++                let _ = consumer.send(cookies);
++            },
+             CoreResourceMsg::GetCookiesForUrl(url, consumer, source) => {
+                 let mut cookie_jar = http_state.cookie_jar.write();
+                 cookie_jar.remove_expired_cookies_for_url(&url);

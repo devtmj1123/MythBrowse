@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+
+name: Bug report
+description: Something in MythBrowse does not work as expected (not a single site breaking).
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problems: please report privately instead (see SECURITY.md).
+        Do not paste API keys, passwords or personal data; check logs before attaching them.
+  - type: input
+    id: version
+    attributes:
+      label: MythBrowse version and build
+      description: Settings > About (version and build commit).
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 23H2, x64
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt (optional)
+      description: "%LOCALAPPDATA%\\MythBrowse\\logs\\mythbrowse.log. Remove anything private first."
+      render: text

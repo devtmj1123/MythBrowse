@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mythbrowse.internal/schemas/compat-ruleset-1.json",
+  "title": "MythBrowse compat ruleset, schema 1",
+  "description": "Per-site compat rules (TOML files; this schema describes the parsed document). The browser enforces the same rules in crates/compat/src/rules.rs, plus trust rules by source: only built-in or signed remote rulesets may use hosts = [\"*\"], and only for kind = \"polyfill\" with css / js. Local rules' JS is never put in the all-sites bundle. Copyright (c) 2026 JustMyth / Tan Ming Jing. SPDX-License-Identifier: MPL-2.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "version"],
+  "properties": {
+    "schema": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "version": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic. A signed remote ruleset older than the last one accepted is refused (no rollback)."
+    },
+    "description": { "type": "string" },
+    "rule": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9._-]{1,80}$"
+    },
+    "hostPattern": {
+      "type": "string",
+      "description": "\"*\" = every web site; \"example.com\" = it and subdomains; \"=example.com\" = exactly; \"*.example.com\" = subdomains only. Lower-case ASCII (punycode), no scheme or port. mythbrowse.internal never matches.",
+      "pattern": "^(\\*|(=|\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+)$"
+    },
+    "pathPattern": {
+      "type": "string",
+      "description": "Path glob starting with /, * matches any run of characters.",
+      "pattern": "^/\\S{0,511}$"
+    },
+    "blockPattern": {
+      "type": "string",
+      "description": "host/path glob without a scheme, e.g. cdn.example.com/js/legacy-*.js. The host part is a host pattern other than \"*\".",
+      "pattern": "^(=|\\*\\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(/\\S*)?$",
+      "maxLength": 512
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "hosts"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string" },
+        "kind": { "enum": ["polyfill", "site", "ai"], "default": "site" },
+        "hosts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/hostPattern" } },
+        "exclude_hosts": { "type": "array", "items": { "$ref": "#/$defs/hostPattern", "not": { "const": "*" } } },
+        "paths": { "type": "array", "items": { "$ref": "#/$defs/pathPattern" } },
+        "ua": {
+          "type": "string",
+          "description": "Preset (\"firefox\", \"chrome\", \"servo\", \"firefox-windows\", \"firefox-linux\", \"chrome-windows\") or a printable-ASCII user-agent string, 10-512 chars. Overrides what the page's scripts see (navigator.userAgent / appVersion / platform); the HTTP header keeps the global ua_mode."
+        },
+        "css": { "type": "string", "maxLength": 65536 },
+        "js": {
+          "type": "string",
+          "maxLength": 65536,
+          "description": "Function body; runs once per page in its own try block."
+        },
+        "block": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/blockPattern" },
+          "description": "Subresource loads (not navigations) to cancel on matching pages."
+        },
+        "mode": { "enum": ["reader", "simplified"] },
+        "enabled": { "type": "boolean", "default": true },
+        "fills": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Polyfills: the missing-feature names (as the bootstrap reports them) this rule fills in."
+        },
+        "note": { "type": "string" },
+        "created_ms": { "type": "integer", "minimum": 0 }
+      },
+      "anyOf": [
+        { "required": ["ua"] },
+        { "required": ["css"] },
+        { "required": ["js"] },
+        { "required": ["block"] },
+        { "required": ["mode"] }
+      ]
+    }
+  }
+}

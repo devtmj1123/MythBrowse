@@ -1,0 +1,956 @@
+/* SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing */
+/* Browser chrome on the MythDesk design system (design/tokens.css): the title bar sits on the
+   sky like MythDesk's, tabs are glass pills like its status chips, the window buttons are its
+   46 px title-bar buttons, and the address bar is a glass field.
+   This page covers the whole window: the sky behind everything, the bars on top, and on web
+   pages the shadow of the page card that floats on the sky (the page itself is composed over
+   #card by the shell; see crates/engine/src/frame.rs).
+   --chrome-height must match CHROME_CSS_HEIGHT and --titlebar-height TITLEBAR_CSS_HEIGHT in
+   crates/engine/src/chrome.rs; --card-gap / --card-radius match CARD_GAP_CSS,
+   CARD_GAP_MAXIMIZED_CSS and CARD_RADIUS_CSS in crates/engine/src/frame.rs. */
+
+:root {
+  --chrome-height: 88px;
+  --titlebar-height: 40px;
+  --toolbar-height: 48px;
+  --card-gap: 8px;
+  --card-radius: 14px;
+  /* Fade-out colour behind clipped tab titles: the sky top, tinted like the bars (chrome.js). */
+  --strip: var(--sky-top);
+  --strip-0: var(--sky-top-0);
+}
+body.maximized { --card-gap: 4px; }
+
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-size: 13px;
+  background-color: var(--sky-mid);
+  background-image: linear-gradient(180deg, var(--sky-top), var(--sky-mid) 55%, var(--sky-low));
+  cursor: default;
+  user-select: none;
+}
+#sky { top: 0; left: 0; width: 100%; height: 100%; }
+
+/* The page's colour, washed over the sky (low alpha, set by chrome.js; transparent on internal
+   pages). A colour transition, not an animation loop: it only runs when the tint changes. */
+#tint {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: rgba(0, 0, 0, 0);
+  /* No transition (v0.4): a full-window colour change re-blurs every glass surface each frame. */
+}
+
+/* Where the page card floats. The shell draws the page over it; only the soft shadow and a
+   hairline around it (and the sky at its rounded corners) show. */
+#card {
+  display: none;
+  position: fixed;
+  z-index: 0;
+  top: calc(var(--chrome-height) + var(--card-gap));
+  left: var(--card-gap);
+  right: var(--card-gap);
+  bottom: var(--card-gap);
+  border-radius: var(--card-radius);
+  box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.08), 0 1px 2px rgba(10, 16, 40, 0.08),
+    0 6px 22px rgba(10, 16, 40, 0.13);
+  pointer-events: none;
+}
+[data-tone="dark"] #card {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.28),
+    0 6px 22px rgba(0, 0, 0, 0.34);
+}
+body.card #card { display: block; }
+
+.titlebar, .toolbar { position: relative; z-index: 1; }
+
+/* ---- title bar ------------------------------------------------------------------------ */
+
+.titlebar { height: var(--titlebar-height); display: flex; align-items: center; padding-left: 6px; }
+
+.brand { flex: none; width: 34px; height: 30px; display: flex; align-items: center; justify-content: center; margin-right: 4px; }
+
+/* The tab rail: a clear strip floating in the cloud deck (faint tint + hairline, no blur and no
+   shadow of its own), holding the tabs and the new-tab button. */
+.rail {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 3px;
+  border-radius: 14px;
+  background: var(--rail);
+  box-shadow: inset 0 0 0 var(--hair) var(--rail-rim);
+}
+
+.tabs {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+/* A tab sits on the rail; the active one is a flat, lighter glass pill (no shadow). */
+.tab {
+  position: relative;
+  z-index: 1;
+  /* Opening / closing / switching animate in chrome.js (keyed DOM, FLIP, the indicator). */
+  transition: transform var(--d-release) var(--spr-release);
+  /* An explicit width (not just flex-basis): Servo sizes the strip from max-content widths. */
+  flex: 0 1 auto;
+  width: 186px;
+  min-width: 64px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 9px;
+  border-radius: 11px;
+  color: var(--soft);
+}
+.tab:hover { background: var(--chip); color: var(--text); }
+.tab.active { color: var(--text); }
+.tab.active:hover { background: rgba(0, 0, 0, 0); }
+/* The active tab's flat glass is one indicator that springs between tabs (chrome.js). */
+.tab-ind {
+  position: absolute; left: 0; top: 3px; height: 30px; width: 0; border-radius: 11px; z-index: 0;
+  pointer-events: none; background: var(--glass-hi); box-shadow: var(--shadow);  /* flat glass: no shadow */
+}
+/* With the shell's glass: the plain glass tint over the blurred sky, one hairline. */
+html[data-glass="blur"] .tab-ind, html[data-glass="flat"] .tab-ind { background: var(--lg-tint); box-shadow: none; }
+@keyframes tab-in { from { opacity: 0; transform: scale(0.6) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes tab-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.7) translateY(6px); } }
+@keyframes tab-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes tab-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ind-fade { from { opacity: 0.2; } to { opacity: 1; } }
+.tab.tab-in { animation: tab-in var(--d-bouncy) var(--spr-bouncy); }
+.tab.leaving { pointer-events: none; animation: tab-out 160ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+html[data-motion="reduced"] .tab.tab-in { animation: tab-fade-in 180ms ease !important; }
+html[data-motion="reduced"] .tab.leaving { animation: tab-fade-out 180ms ease forwards !important; }
+html[data-motion="reduced"] .tab-ind.ind-fade { animation: ind-fade 200ms linear !important; }
+.tab:active { transform: scale(0.985); }
+
+.tab .tab-icon { flex: none; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.tab .site { width: 18px; height: 18px; border-radius: 6px; font-size: 10px; line-height: 18px; }
+.tab .site.fav { color: #ffffff; }
+.tab .tab-icon .mark { font-size: 7px; }
+.tab .loading-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 1px;
+  border-radius: 50%;
+  border: 2px solid var(--chip-hi);
+  border-top-color: var(--text);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.tab .title {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 30px;
+}
+/* Servo has no text-overflow: chrome.js ends titles that don't fit with an ellipsis. */
+.tab.sleeping .title { opacity: 0.55; }
+
+.tab .close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+.tab:hover .close, .tab.active .close { opacity: 1; }
+.tab .close:hover { background: var(--chip-hi); }
+
+.rail .new-tab { margin-left: 2px; width: 30px; height: 30px; border-radius: 10px; }
+
+.drag-space { flex: 1; min-width: 48px; height: var(--titlebar-height); }
+
+/* MythDesk title-bar buttons: 46 px wide, soft icons, red close. */
+.window-controls { flex: none; display: flex; height: var(--titlebar-height); }
+.tb-btn {
+  width: 46px;
+  height: var(--titlebar-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--press-t);
+}
+.tb-btn:hover { background: var(--chip-hi); }
+.tb-btn:active { background: var(--chip); }
+.tb-btn.close:hover { background: #e81123; }
+.tb-btn.close .ico-hover { display: none; }
+.tb-btn.close:hover .ico-hover { display: flex; }
+.tb-btn.close:hover .ico-normal { display: none; }
+.tb-btn span { display: flex; }
+
+/* ---- toolbar -------------------------------------------------------------------------- */
+
+.toolbar {
+  height: var(--toolbar-height);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 0 8px;
+}
+/* Web pages float below the toolbar on their own (no hairline); internal pages share the sky. */
+
+.side { flex: 0 0 116px; display: flex; align-items: center; gap: 2px; }
+.side-right { justify-content: flex-end; }
+
+/* Icon buttons: MythDesk launcher buttons, scaled to a toolbar. */
+.nav {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--press-t);
+}
+.nav:hover { background: var(--chip); }
+.nav:active { background: var(--chip-hi); }
+.nav[disabled] { opacity: 0.45; background: rgba(0, 0, 0, 0); }
+/* Tasks badge (prototype .nav .badge); line-height = height centres the digit in Servo. */
+.nav { position: relative; }
+.nav .badge {
+  position: absolute; top: 3px; right: 3px; min-width: 15px; height: 15px; line-height: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--ink); color: var(--ink-text); font-size: 10.5px; font-weight: 700; text-align: center;
+}
+.nav .badge[hidden] { display: none; }
+.titlebar .nav { width: 30px; height: 30px; border-radius: 10px; }
+
+.center { flex: 1; min-width: 0; display: flex; justify-content: center; }
+
+/* The address bar: a glass field (MythDesk inputs and composer). */
+.omnibox-wrap {
+  width: 100%;
+  max-width: 780px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 14px;
+  border-radius: 19px;
+  background: var(--glass);
+  box-shadow: var(--shadow);
+  position: relative;
+  /* v0.4: nothing here animates width, box-shadow or background (each frame was a relayout
+     plus a glass re-report). Focus = the ring below, faded by opacity only. */
+}
+/* Focus ring: a plain 2px border just outside the field (v0.4.2). It used to be a spread
+   box-shadow; together with the inset --shadow hairlines those are WebRender box-shadow
+   primitives (segmented masks), the prime suspect for the stray 1 px vertical line a third
+   of the way across the focused bar on a real Windows GPU at 125-150 % (not reproducible on
+   the sandbox's software WebRender). Borders are drawn as border primitives instead. */
+.omnibox-wrap::after {
+  content: ""; position: absolute; top: -2px; left: -2px; right: -2px; bottom: -2px; border-radius: 21px;
+  border: 2px solid var(--accent-ring); opacity: 0; pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.omnibox-wrap.focused::after { opacity: 1; }
+/* With the shell's glass: the strong tint (a text field over the sky), as in the design. The
+   shell's glass shader draws the field's hairline rim itself, so no CSS box-shadow here. */
+html[data-glass="blur"] .omnibox-wrap, html[data-glass="flat"] .omnibox-wrap,
+html[data-glass="blur"] .omnibox-wrap:hover, html[data-glass="flat"] .omnibox-wrap:hover { background: var(--lg-tint-strong); box-shadow: none; }
+.omnibox-wrap .nav { width: 30px; height: 30px; border-radius: 10px; flex: none; }
+.omnibox-wrap .nav[hidden] { display: none; }
+.omni-field { position: relative; flex: 1; min-width: 0; height: 30px; display: flex; align-items: center; }
+.url-view {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  font-size: 13.5px; line-height: 30px; white-space: nowrap; overflow: hidden; color: var(--text);
+  pointer-events: none;
+}
+.url-view b { font-weight: 600; }
+.url-view .url-rest { color: var(--dim); }
+.omnibox-wrap.has-view .omnibox { color: rgba(0, 0, 0, 0); }
+.omnibox-wrap:hover { background: var(--glass-hi); }
+.omnibox-wrap.focused { background: var(--glass-hi); }
+
+.lead { flex: none; height: 24px; display: flex; align-items: center; gap: 6px; color: var(--soft); white-space: nowrap; }
+.lead-icon { display: flex; }
+.lead-label { font-size: 12.5px; font-weight: 600; }
+.lead-label:empty { display: none; }
+.lead.insecure { color: var(--bad); }
+
+.omnibox {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: rgba(0, 0, 0, 0);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13.5px;
+}
+.omnibox::placeholder { color: var(--dim); }
+
+.hint { flex: none; display: flex; align-items: center; gap: 6px; color: var(--dim); font-size: 12px; white-space: nowrap; }
+.hint kbd { font-size: 11px; }
+
+.progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; overflow: hidden; }
+.progress i {
+  display: block;
+  width: 28%;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+  opacity: 0.5;
+  animation: progress 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+@keyframes progress { from { transform: translateX(-100%); } to { transform: translateX(360%); } }
+
+/* ---- Myth pill / approval card ------------------------------------------------------------
+   Floats over the bottom centre of the page card. The shell positions it (left/top/width/
+   height from state.frame.overlay, set by chrome.js) and composes exactly that rounded
+   rectangle over the page, with its own soft shadow, so the element here draws no outer
+   shadow. Servo 0.1.4: no backdrop-filter (the glass is nearly opaque), no text-overflow
+   (chrome.js truncates with an ellipsis), and a fixed-height <button> puts its label at the
+   top, so buttons get their height from padding + line-height only. Colours keep >= 4.5:1. */
+:root {
+  --myth-bg: rgba(255, 255, 255, 0.93);
+  --myth-line: rgba(20, 30, 60, 0.10);
+  --myth-soft: rgba(22, 32, 58, 0.76);
+  --myth-navy: #16203a;
+  --myth-btn: rgba(20, 30, 60, 0.08);
+  --myth-btn-hi: rgba(20, 30, 60, 0.15);
+}
+[data-tone="dark"] {
+  --myth-bg: rgba(24, 30, 56, 0.94);
+  --myth-line: rgba(255, 255, 255, 0.12);
+  --myth-soft: rgba(232, 236, 255, 0.78);
+  --myth-navy: #3f63c4;
+  --myth-btn: rgba(255, 255, 255, 0.12);
+  --myth-btn-hi: rgba(255, 255, 255, 0.22);
+}
+#myth {
+  position: fixed;
+  z-index: 3;
+  left: 0; top: 0; width: 0; height: 0;
+  border-radius: 22px;
+  background: var(--myth-bg);
+  box-shadow: inset 0 0 0 1px var(--myth-line);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+#myth[hidden] { display: none; }
+/* The content sits at its final size, anchored bottom-centre (left 50% + a negative margin
+   set by chrome.js), so the pill <-> card morph only moves the surface's edges, like the
+   design's clip-path. */
+#myth .mp-in, #myth .mc-in { position: absolute; left: 50%; bottom: 0; }
+#myth .mp-in {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 7px 0 16px;
+  white-space: nowrap;
+}
+#myth .my-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #3d7fd9; }
+#myth.controlling .my-dot { background: #f2a65a; box-shadow: 0 0 0 3px rgba(242, 166, 90, 0.25); }
+#myth.thinking .my-dot { box-shadow: 0 0 0 3px rgba(61, 127, 217, 0.22); }
+#myth.waiting .my-dot { background: #f0a020; box-shadow: 0 0 0 3px rgba(240, 160, 32, 0.28); }
+#myth.done .my-dot { background: #34c47c; }
+#myth.error .my-dot { background: var(--bad); }
+#myth.stopped .my-dot { background: var(--dim); }
+#myth .my-name { flex: none; font-weight: 700; font-size: 14px; line-height: 18px; }
+#myth > .mark { font-size: 9px; margin-right: -2px; }
+#myth .my-sep { flex: none; width: 1px; height: 18px; background: var(--myth-line); }
+#myth .my-dot { width: 8px; height: 8px; }
+#myth.controlling .my-dot, #myth.thinking .my-dot { background: var(--ok); box-shadow: none; }
+#myth .my-step {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 300px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--myth-soft);
+  font-size: 14px;
+  line-height: 18px;
+}
+#myth .my-step b { color: var(--text); font-weight: 600; }
+#myth .my-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+/* Same font, line-height, padding and border on every button: equal heights, labels centred. */
+#myth button {
+  flex: none;
+  display: block;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--text);
+  background: var(--myth-btn);
+  white-space: nowrap;
+  transition: var(--press-t);
+}
+#myth button:hover { background: var(--myth-btn-hi); }
+#myth button:focus { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+#myth button.my-allow { background: var(--myth-navy); color: #ffffff; }
+#myth button.my-allow:hover { background: #2b3c6e; }
+[data-tone="dark"] #myth button.my-allow:hover { background: #4d72d6; }
+#myth button.my-icon { padding: 7px; }
+#myth button.my-icon span { display: block; width: 16px; height: 16px; }
+/* Round icon button (Stop / close on the pill): 36 px, flat translucent fill. */
+#myth button.my-round { padding: 10px; border-radius: 18px; }
+#myth button.my-round span { display: flex; align-items: center; justify-content: center; }
+
+/* The approval card (approved design): a marked header (who asks, where), the question, a
+   small box with what it involves, then Don't allow / Allow as two equal round buttons. */
+#myth.card { border-radius: 28px; white-space: normal; }
+#myth.card .mc-in { display: flex; flex-direction: column; padding: 18px 18px 16px; }
+#myth.card .mc-head { display: flex; align-items: center; gap: 10px; height: 34px; margin-bottom: 10px; }
+#myth.card .mc-mark {
+  flex: none; width: 32px; height: 32px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+  background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line);
+}
+#myth.card .mc-mark .mark { font-size: 9px; }
+#myth.card .mc-who { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+#myth.card .mc-who b { display: block; font-size: 15px; font-weight: 700; line-height: 19px; white-space: nowrap; }
+#myth.card .mc-where { display: block; font-size: 12.5px; line-height: 16px; color: var(--myth-soft); white-space: nowrap; overflow: hidden; }
+#myth.card .mc-what {
+  margin: 4px 2px 10px; max-height: 40px; overflow: hidden;
+  font-size: 15px; font-weight: 600; line-height: 20px;
+}
+#myth.card .mc-detail {
+  display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border-radius: 16px;
+  background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line);
+  font-size: 13px; line-height: 18px; max-height: 76px; overflow: hidden;
+}
+#myth.card .mc-row { display: flex; gap: 10px; min-width: 0; }
+#myth.card .mc-label { flex: none; width: 52px; color: var(--myth-soft); }
+#myth.card .mc-value { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
+#myth.card .mc-row + .mc-row .mc-value { white-space: normal; max-height: 36px; }
+/* The destination of a navigation is shown whole (it may carry data): wrapped anywhere,
+   scrolling inside the row if it is very long. */
+#myth.card .mc-row.mc-dest .mc-value { white-space: normal; word-break: break-all; max-height: 96px; overflow-y: auto; }
+#myth.card .mc-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+/* Verification card: one note line instead of the Where / Why rows. */
+#myth.card.handoff .mc-note { color: var(--myth-soft); white-space: normal; }
+/* Quiet badge on a background tab whose site wants a human check (no pop-up, no motion). */
+.tab .tab-verify {
+  flex: none; width: 7px; height: 7px; margin: 0 4px; border-radius: 50%;
+  background: transparent; box-shadow: inset 0 0 0 1.5px var(--myth-soft, #8a8f99);
+}
+/* Two equal 40 px pills (design .btn): Don't allow = lite glass with its hairline, Allow =
+   navy. line-height = height centres the label in Servo. */
+#myth.card .mc-actions button {
+  flex: 1 1 0; height: 40px; padding: 0 18px; border-radius: 20px;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1; font-size: 14px; text-align: center;
+}
+#myth.card .mc-actions button.my-deny { background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line); }
+#myth.card .mc-actions button.my-deny:hover { background: var(--myth-btn-hi); }
+
+/* Morph (chrome.js morph()): the surface springs, the content enters (keyframes: Servo has
+   no Web Animations). Durations / curves are the design's springs (--d-* / --spr-*). */
+@keyframes mm-pop { from { transform: scale(0.97); } to { transform: none; } }
+@keyframes mm-squash { from { transform: scale(1.04, 0.94); } to { transform: none; } }
+@keyframes mc-in { from { opacity: 0; transform: translateY(18px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes mc-kid { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes mm-fade { from { opacity: 0; } to { opacity: 1; } }
+#myth.morphing { overflow: hidden; }
+#myth.mm-pop { animation: mm-pop var(--d-bouncy) var(--spr-bouncy); }
+#myth.mm-squash { animation: mm-squash var(--d-release) var(--spr-release); }
+@keyframes mp-step-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+#myth .my-step.mp-step-in { animation: mp-step-in var(--d-snappy) var(--spr-snappy); }
+#myth .mc-in-anim { animation: mc-in var(--d-snappy) var(--spr-snappy); }
+#myth.morphing .mc-kid { animation: mc-kid var(--d-snappy) var(--spr-snappy) backwards; }
+#myth .mp-in-anim { animation: mm-fade 220ms ease 80ms backwards; }
+html[data-motion="reduced"] #myth .mm-fade { animation: mm-fade 180ms ease !important; }
+
+/* Tab status dot: Myth works in this tab. Static (no idle animation). */
+.tab .tab-myth { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #3d7fd9; }
+.tab .tab-myth.controlling { background: #f2a65a; }
+.tab .tab-myth.waiting { background: #f0a020; box-shadow: 0 0 0 2px rgba(240, 160, 32, 0.30); }
+
+/* ---- Site compat: toolbar indicator + panel ------------------------------------------------
+   The indicator is a quiet line icon next to the bookmark star; a small dot appears only when
+   the detector found problems (amber / red) or a site fix is active (blue). Static: no
+   animation. The panel floats over the top right of the page card: the shell positions it
+   (state.frame.overlay, kind "compat") and composes that rounded rectangle over the page,
+   like the Myth pill, so it draws no outer shadow. Same Servo 0.1.4 limits as the pill (no
+   backdrop-filter, no text-overflow, buttons sized by padding + line-height). */
+.compat-btn { position: relative; }
+.compat-btn[hidden] { display: none; }
+.compat-btn .compat-dot {
+  display: none;
+  position: absolute;
+  top: 5px; right: 5px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+}
+.compat-btn.fixed .compat-dot { display: block; background: #3d7fd9; }
+.compat-btn.lv-degraded .compat-dot { display: block; background: #f0a020; }
+.compat-btn.lv-broken .compat-dot { display: block; background: var(--bad); }
+.compat-btn.lv-paused .compat-dot { display: block; background: var(--dim); }
+.compat-btn.open { background: var(--chip-hi); }
+
+.compat-panel {
+  position: fixed;
+  z-index: 3;
+  left: 0; top: 0; width: 0; height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--myth-bg);
+  box-shadow: inset 0 0 0 1px var(--myth-line);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+  overflow: hidden;
+  user-select: text;
+}
+.compat-panel[hidden] { display: none; }
+.cp-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px 10px 16px;
+  border-bottom: 1px solid var(--myth-line);
+}
+.cp-head .cp-ic { flex: none; width: 18px; height: 18px; }
+.cp-title { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.cp-name { font-weight: 700; font-size: 14px; line-height: 18px; white-space: nowrap; }
+.cp-host { color: var(--myth-soft); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; }
+.cp-body { flex: 1 1 auto; overflow-y: auto; padding: 12px 16px 16px; }
+
+.cp-status { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 14px; line-height: 20px; }
+.cp-status .cp-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }
+.cp-status.ok .cp-dot { background: #34c47c; }
+.cp-status.degraded .cp-dot { background: #f0a020; }
+.cp-status.broken .cp-dot { background: var(--bad); }
+.cp-status-text { flex: 1 1 auto; min-width: 0; }
+.cp-score { flex: none; color: var(--myth-soft); font-weight: 500; font-size: 12px; }
+
+.cp-findings { list-style: none; margin: 10px 0 0; padding: 0; }
+.cp-findings li { display: flex; gap: 8px; padding: 3px 0; font-size: 12.5px; color: var(--text); }
+.cp-findings li .cp-sev { flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 50%; background: var(--dim); }
+.cp-findings li.sev-bad .cp-sev { background: var(--bad); }
+.cp-findings li.sev-warn .cp-sev { background: #f0a020; }
+.cp-findings li.sev-info { color: var(--myth-soft); }
+
+.cp-card {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--myth-btn);
+}
+.cp-card.plain { background: transparent; padding: 0; }
+.cp-card.preview { box-shadow: inset 3px 0 0 0 #3d7fd9; }
+.cp-card-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.cp-text { font-size: 13px; }
+.cp-soft { color: var(--myth-soft); font-size: 12.5px; margin-top: 4px; }
+.cp-fine { color: var(--myth-soft); font-size: 11.5px; line-height: 16px; margin-top: 8px; }
+.cp-notice { margin-top: 8px; font-size: 12.5px; color: #2f7d55; }
+[data-tone="dark"] .cp-notice { color: #6fdca4; }
+.cp-error, .cp-blocked { margin-top: 8px; font-size: 12.5px; color: var(--bad); }
+.cp-warn { margin-top: 6px; font-size: 12.5px; color: #a8650a; }
+[data-tone="dark"] .cp-warn { color: #ffc65c; }
+.cp-code-label { margin-top: 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--myth-soft); }
+.cp-code {
+  margin: 4px 0 0;
+  max-height: 140px;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--myth-bg);
+  box-shadow: inset 0 0 0 1px var(--myth-line);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 16px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.cp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.cp-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--text);
+  background: var(--myth-btn);
+  white-space: nowrap;
+  transition: var(--press-t);
+}
+.cp-btn:hover { background: var(--myth-btn-hi); }
+.cp-btn:focus { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.cp-btn[disabled] { opacity: 0.45; }
+.cp-btn.primary { background: var(--myth-navy); color: #ffffff; }
+.cp-btn.primary:hover { background: #2b3c6e; }
+[data-tone="dark"] .cp-btn.primary:hover { background: #4d72d6; }
+.cp-btn.small { padding: 5px 11px; font-size: 12px; }
+.cp-btn.cp-icon { padding: 7px; background: transparent; }
+.cp-btn.cp-icon:hover { background: var(--myth-btn); }
+.cp-btn.cp-icon.small { padding: 5px; }
+
+.cp-section {
+  margin-top: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--myth-soft);
+}
+.cp-rule { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--myth-line); }
+.cp-rule.off .cp-rule-title { color: var(--myth-soft); }
+.cp-rule-text { flex: 1 1 auto; min-width: 0; }
+.cp-rule-title { font-size: 12.5px; font-weight: 600; }
+.cp-rule-meta { font-size: 11.5px; color: var(--myth-soft); }
+.cp-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--myth-line); }
+
+/* ---- liquid glass (design/tokens.css) ----------------------------------------------------
+   With the shell's blur on, the Myth pill / approval card and the compat panel are glass over
+   the page (a stronger tint, the uniform hairline); the window is transparent and the shell
+   draws the sky. Off: the near-opaque fills above. */
+html[data-glass="blur"] {
+  /* Always over a web page (any colour, any busyness): the floor-clamped tint, never clearer
+     than .40 light / .44 dark whatever the Transparency setting (tokens.css). */
+  --myth-bg: var(--lg-tint-float);
+  --myth-line: var(--lg-rim);
+}
+html[data-glass="blur"] #myth, html[data-glass="blur"] .compat-panel { box-shadow: inset 0 0 0 var(--hair) var(--myth-line); }
+html[data-glass="blur"] #myth.card { box-shadow: inset 0 0 0 var(--hair) var(--myth-line), var(--lg-float); }
+/* Buttons on glass: flat translucent fills (--btn-glass) with the hairline. */
+html[data-glass="blur"] { --myth-btn: var(--btn-glass); --myth-btn-hi: var(--btn-glass-hi); }
+/* The calm cloud deck shows through the bars as it is: no page-colour wash over the sky. */
+html[data-glass="blur"] #tint, html[data-glass="flat"] #tint { display: none; }
+.compat-panel:not([hidden]) { box-shadow: inset 0 0 0 var(--hair) var(--myth-line), var(--lg-float); }
+/* The approval card's subtitle sits directly on the glass body: main text at .85. */
+html[data-glass="blur"] #myth.card .mc-where { color: var(--label); }
+html[data-glass="blur"] #myth, html[data-glass="blur"] .compat-panel, html[data-glass="blur"] .tasks-panel { text-shadow: var(--lg-halo); }
+html[data-glass="blur"] #myth button.my-allow, html[data-glass="blur"] .cp-btn.primary { text-shadow: none; }
+
+
+/* ---- Tasks panel (the approved design's floating #tasks) ----------------------------------
+   Floats over the top right of the page area; the shell positions it (state.frame.panel) and
+   composes it over the page like the Myth pill. Strong glass + hairline + the floating shadow;
+   over an internal page (whose content is not part of the blurred backdrop) the denser tint.
+   Servo 0.1.4: labels centred with line-height = height, titles cut by chrome.js. */
+.tasks-panel {
+  position: fixed;
+  z-index: 4;
+  left: 0; top: 0; width: 0; height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 26px;
+  background: var(--myth-bg);
+  box-shadow: inset 0 0 0 1px var(--myth-line), var(--lg-float);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+  overflow: hidden;
+}
+.tasks-panel[hidden] { display: none; }
+html[data-glass="blur"] .tasks-panel.on-internal, html[data-glass="flat"] .tasks-panel.on-internal { background: var(--glass-hi); }
+.tasks-panel .tp-head { flex: none; display: flex; align-items: center; gap: 10px; height: 54px; padding: 6px 12px 0 18px; }
+.tasks-panel h3 { margin: 0; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; line-height: 22px; }
+.tasks-panel h3 kbd { font-size: 12px; font-weight: 600; line-height: 18px; padding: 0 6px; border-radius: 6px; background: var(--chip); color: var(--soft); }
+.tasks-panel .tp-btn.tp-icon { width: 32px; height: 32px; padding: 0; border-radius: 16px; background: rgba(0, 0, 0, 0); box-shadow: none; display: flex; align-items: center; justify-content: center; }
+.tasks-panel .tp-btn.tp-icon:hover { background: var(--chip); }
+.tasks-panel .tp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 14px 14px; }
+.tasks-panel .tp-task, .tasks-panel .tp-mini {
+  border-radius: 20px; margin-bottom: 10px;
+  background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line);
+}
+.tasks-panel .tp-task { padding: 14px; }
+.tasks-panel .tp-top { display: flex; gap: 12px; }
+.tasks-panel .tp-thumb {
+  flex: none; width: 104px; height: 74px; border-radius: 12px; overflow: hidden; position: relative;
+  background: #ffffff; box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.10);
+}
+.tasks-panel .tp-thumb img { display: block; width: 104px; height: 74px; object-fit: cover; object-position: 0 0; }
+.tasks-panel .tp-tt { flex: 1 1 auto; min-width: 0; }
+.tasks-panel .tp-title { display: block; font-size: 14px; font-weight: 700; line-height: 18px; max-height: 54px; overflow: hidden; }
+.tasks-panel .tp-status { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 12.5px; line-height: 16px; color: var(--myth-soft); white-space: nowrap; }
+.tasks-panel .tp-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+.tasks-panel .tp-status.running .tp-dot { background: var(--ok); }
+.tasks-panel .tp-status.waiting .tp-dot { background: #f0a020; }
+.tasks-panel .tp-status.done .tp-dot { background: var(--ok); }
+.tasks-panel .tp-status.stopped .tp-dot, .tasks-panel .tp-status.error .tp-dot { background: var(--bad); }
+.tasks-panel .tp-prog { height: 4px; border-radius: 2px; background: var(--chip-hi); margin: 12px 0 4px; overflow: hidden; }
+.tasks-panel .tp-prog i { display: block; height: 4px; border-radius: 2px; background: var(--ink); transform-origin: 0 50%; transition: transform var(--d-soft) var(--spr-soft); }
+.tasks-panel .tp-steps { list-style: none; margin: 10px 0 0; padding: 0; }
+.tasks-panel .tp-steps li { display: flex; align-items: center; gap: 10px; height: 28px; padding: 0 2px; font-size: 13px; line-height: 28px; color: var(--myth-soft); }
+.tasks-panel .tp-steps .tx { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
+.tasks-panel .tp-steps .s {
+  flex: none; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--dim);
+  display: flex; align-items: center; justify-content: center;
+}
+.tasks-panel .tp-steps li.ok { color: var(--text); }
+.tasks-panel .tp-steps li.ok .s { background: var(--ink); border-color: var(--ink); }
+[data-tone="dark"] .tasks-panel .tp-steps li.ok .s { background: #3f63c4; border-color: #3f63c4; }
+.tasks-panel .tp-steps li.now { color: var(--text); font-weight: 600; }
+.tasks-panel .tp-steps li.now .s { border-color: var(--ok); }
+.tasks-panel .tp-steps li.now .s::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.tasks-panel .tp-btns { display: flex; gap: 8px; margin-top: 12px; }
+.tasks-panel .tp-btn {
+  flex: 1 1 0; display: flex; align-items: center; justify-content: center; gap: 7px;
+  height: 34px; padding: 0 8px; border: 0; border-radius: 17px;
+  font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; color: var(--text);
+  background: var(--myth-btn); box-shadow: inset 0 0 0 1px var(--myth-line);
+  transition: var(--press-t);
+}
+.tasks-panel .tp-btn:hover { background: var(--myth-btn-hi); }
+.tasks-panel .tp-btn.danger { color: var(--bad); }
+.tasks-panel .tp-btn .ico { flex: none; }
+.tasks-panel .tp-mini { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px; }
+.tasks-panel .tp-mini b { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; font-size: 13.5px; font-weight: 600; line-height: 18px; }
+.tasks-panel .tp-when { flex: none; font-size: 12px; color: var(--dim); white-space: nowrap; }
+.tasks-panel .tp-empty { padding: 8px 4px 14px; color: var(--myth-soft); font-size: 13px; line-height: 19px; }
+.tasks-panel .tp-all {
+  display: flex; align-items: center; justify-content: center; height: 30px; margin: 2px auto 0; padding: 0 12px; border: 0; border-radius: 15px;
+  font-size: 12.5px; font-weight: 600; line-height: 1; color: var(--myth-soft); background: rgba(0, 0, 0, 0);
+}
+.tasks-panel .tp-all:hover { background: var(--chip); color: var(--text); }
+.tasks-panel .tp-peek {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-direction: column;
+  padding: 0 14px 14px; background: var(--myth-bg); border-radius: inherit; animation: mv-op-in 150ms linear;
+}
+html[data-glass="blur"] .tasks-panel .tp-peek { background: var(--lg-tint-float); }
+.tasks-panel .tp-peek .tp-head { padding-left: 4px; padding-right: 0; }
+.tasks-panel .tp-big { flex: 1 1 auto; min-height: 0; border-radius: 18px; overflow: hidden; background: #ffffff; box-shadow: 0 0 0 1px rgba(20, 30, 60, 0.1); }
+.tasks-panel .tp-big img { display: block; width: 100%; height: auto; }
+/* Items settle in just behind the panel (design: translateY(10px), snappy, staggered). */
+@keyframes tp-kid { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.tasks-panel .tp-kid { animation: tp-kid var(--d-snappy) var(--spr-snappy) backwards; }
+.nav.on { background: var(--chip-hi); }
+
+/* ---- Files: pinned tabs, Downloads button ------------------------------------- */
+/* A pinned tab is just its icon (title in the tooltip), no close button; it stays at the
+   start of the strip. */
+.tab.pinned { width: 40px; min-width: 40px; flex: none; padding: 0; justify-content: center; }
+.tab.pinned .title, .tab.pinned .close { display: none; }
+.dl-btn .dl-bar {
+  position: absolute; left: 8px; right: 8px; bottom: 4px; height: 3px; border-radius: 2px;
+  background: var(--chip-hi); overflow: hidden;
+}
+.dl-btn .dl-bar[hidden] { display: none; }
+.dl-btn .dl-bar b { display: block; height: 100%; width: 100%; background: var(--ink); border-radius: 2px; transform-origin: 0 50%; transform: scaleX(0); transition: transform 0.25s ease; }
+.dl-btn .dl-bar.indet b { width: 40%; }
+.dl-btn .dl-dot {
+  position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 4px; background: var(--warn);
+}
+.dl-btn .dl-dot[hidden] { display: none; }
+/* ---- Passwords: toolbar key + panel (shares the compat panel's glass and buttons) ---------- */
+.pw-btn { position: relative; }
+.pw-btn[hidden] { display: none; }
+.pw-btn.saved .compat-dot { display: block; background: #3d7fd9; }
+.pw-btn.ask .compat-dot { display: block; background: #f0a020; }
+.pw-btn.open { background: var(--chip-hi); }
+.pw-panel .pw-field { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--myth-line); }
+.pw-panel .pw-field:last-of-type { border-bottom: 0; }
+.pw-panel .pw-k { flex: none; width: 76px; color: var(--myth-soft); font-size: 12px; }
+.pw-panel .pw-v { flex: 1 1 auto; min-width: 0; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-panel .pw-dots { letter-spacing: 2px; }
+.pw-acct {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 6px; padding: 9px 11px;
+  border: 0; border-radius: 12px; background: var(--myth-btn); color: var(--text); font: inherit;
+  text-align: left; cursor: pointer;
+}
+.pw-acct:hover { background: var(--myth-btn-hi); }
+.pw-acct:focus { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.pw-acct[disabled] { opacity: 0.5; cursor: default; }
+.pw-acct .pw-av {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; background: var(--myth-navy); color: #ffffff; font-weight: 700; font-size: 12.5px;
+}
+.pw-acct .pw-who { flex: 1 1 auto; min-width: 0; }
+.pw-acct .pw-user { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pw-acct .pw-from { color: var(--myth-soft); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pw-acct .pw-fill { flex: none; color: var(--myth-soft); font-size: 12px; }
+
+/* ---- Chrome popups (ui/popups.js) ----------------------------------------------------------
+   The suggestions dropdown, context menus, a page's dialog / permission sheet: the same
+   floating glass as the compat / Tasks panels (--myth-* tokens, data-glass="f"). One at a time;
+   its rectangle goes to the shell (/api/popup), which composes it over the page. */
+.pop {
+  position: fixed;
+  z-index: 6;
+  left: 0; top: 0;
+  background: var(--myth-bg);
+  color: var(--text);
+  box-shadow: inset 0 0 0 var(--hair) var(--myth-line), var(--lg-float);
+  font-size: 13.5px;
+}
+.pop[hidden] { display: none; }
+/* v0.4: near-opaque (tokens.css --menu-bg), so the page under a menu never bleeds through. */
+.pop, html[data-glass="blur"] .pop, html[data-glass="flat"] .pop {
+  background: var(--menu-bg); box-shadow: inset 0 0 0 var(--hair) var(--menu-rim), var(--menu-shadow); text-shadow: none;
+}
+.pop .sug-row.on, .pop .menu-item.on:not([disabled]), .pop .menu-item:hover:not([disabled]) { background: var(--menu-hi); }
+.pop.pop-in { animation: pop-in var(--d-soft) var(--spr-soft); transform-origin: top left; }
+.sheet.pop-in { transform-origin: top center; }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+html[data-motion="reduced"] .pop.pop-in { animation: pop-fade 160ms ease; }
+html[data-motion="off"] .pop.pop-in { animation: none; }
+@keyframes pop-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* Suggestions: under the address bar, as wide as it. */
+.sug { border-radius: 18px; padding: 6px; }
+.sug-row {
+  display: flex; align-items: center; gap: 10px;
+  height: 36px; padding: 0 10px; border-radius: 12px;
+  cursor: default; white-space: nowrap; overflow: hidden;
+}
+.sug-row.on { background: var(--myth-btn); }
+.sug-ic { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+.sug-ic .mark { font-size: 7px; }
+.sug-main { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
+.sug-title { flex: 0 1 auto; min-width: 0; max-width: 70%; overflow: hidden; }
+.sug-url { flex: 1 1 0; min-width: 0; color: var(--myth-soft); font-size: 12.5px; overflow: hidden; }
+.sug-hint { flex: none; color: var(--myth-soft); font-size: 12px; padding: 2px 8px; border-radius: 8px; background: var(--myth-btn); }
+.sug-row.k-ask_myth .sug-title { font-weight: 600; }
+.sug-del {
+  flex: none; display: none; width: 24px; height: 24px; border: 0; border-radius: 8px;
+  background: rgba(0, 0, 0, 0); align-items: center; justify-content: center;
+}
+.sug-row.on .sug-del { display: flex; }
+.sug-del:hover { background: var(--myth-btn-hi); }
+.sug-foot { padding: 6px 12px 2px; color: var(--myth-soft); font-size: 11.5px; }
+
+/* Context menus. */
+.menu { min-width: 220px; max-width: 340px; border-radius: 14px; padding: 5px; outline: none; }
+.menu-item {
+  display: flex; align-items: center; gap: 18px; width: 100%;
+  height: 30px; padding: 0 12px; border: 0; border-radius: 9px;
+  background: rgba(0, 0, 0, 0); color: var(--text); font: inherit; font-size: 13px; text-align: left;
+}
+.menu-item.on:not([disabled]), .menu-item:hover:not([disabled]) { background: var(--myth-btn); }
+.menu-item:active:not([disabled]) { transform: scale(0.99); }
+.menu-item[disabled] { color: var(--myth-soft); opacity: 0.7; }
+.menu-item { line-height: 1; }
+.menu-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; line-height: 1; }
+.menu-key { flex: none; color: var(--myth-soft); font-size: 12px; }
+.menu-sep { height: 1px; margin: 4px 8px; background: var(--myth-line); }
+
+/* A page's dialog / permission sheet: hangs from the top of the page card (dialogs) or under
+   the address bar's site icon (permissions). The site that asks is always named in bold. */
+.sheet { border-radius: 22px; padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.sh-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.sh-head b { font-weight: 700; }
+.sh-who { min-width: 0; overflow-wrap: anywhere; }
+.sh-title { font-weight: 700; font-size: 15px; }
+.sh-msg { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; line-height: 1.45; }
+.sh-msg.soft { color: var(--myth-soft); }
+.sh-input { height: 34px; padding: 0 10px; border-radius: 10px; border: 0; font: inherit;
+  background: var(--myth-btn); color: var(--text); box-shadow: inset 0 0 0 var(--hair) var(--myth-line); }
+.sh-input:focus { outline: 2px solid var(--accent-ring); }
+.sh-check { display: flex; align-items: center; gap: 6px; color: var(--myth-soft); font-size: 12.5px; }
+/* Checkbox in the navy of the sheet's primary button (where accent-color is supported). */
+.sh-check input { accent-color: var(--navy, var(--ink)); margin: 0; }
+.sh-acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+.sh-btn {
+  height: 32px; padding: 0 16px; border: 0; border-radius: 16px;
+  background: var(--myth-btn); color: var(--text); font: inherit; font-weight: 600; font-size: 13px;
+  transition: var(--press-t);
+}
+.sh-btn:hover { background: var(--myth-btn-hi); }
+.sh-btn:active { transform: scale(0.97); opacity: 0.82; }
+.sh-btn:focus { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.sh-btn.primary { background: var(--myth-navy); color: #ffffff; }
+.sh-btn.primary:hover { background: #2b3c6e; }
+html[data-glass="blur"] .sh-btn.primary { text-shadow: none; }
+
+/* Pop-up blocked indicator (inside the address bar, by the compat icon). */
+.popups-btn { position: relative; }
+.popups-btn[hidden] { display: none; }
+.popups-dot { position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.popups-dot[hidden] { display: none; }
+
+/* Snap Layouts: Windows reports the hover over the maximize button (non-client), not CSS. */
+.tb-btn.snap-hover { background: var(--chip-hi); }
+
+/* v0.4.2: perf HUD (MB_PERF=1 / Ctrl+Shift+F12) and the middle-click autoscroll anchor. */
+.perf-hud {
+  position: fixed; left: 10px; bottom: 10px; z-index: 50; pointer-events: none;
+  max-width: 340px; padding: 8px 10px; border-radius: 10px; white-space: pre;
+  background: rgba(10, 16, 32, 0.82); color: #e8eefc;
+  font: 11px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.autoscroll-anchor { position: fixed; width: 30px; height: 30px; z-index: 50; pointer-events: none; }
+.autoscroll-anchor .as-ring { fill: rgba(255, 255, 255, 0.92); stroke: rgba(10, 16, 32, 0.55); stroke-width: 1; }
+.autoscroll-anchor .as-arrows { fill: rgba(10, 16, 32, 0.8); }
+
+/* Site popover (v0.4.2, popups.js): from the address bar's site icon. */
+.omnibox-wrap.has-site .lead { cursor: pointer; border-radius: 8px; margin-left: -4px; padding: 0 4px; }
+.omnibox-wrap.has-site .lead:hover { background: var(--menu-hi, var(--myth-btn)); }
+.site-pop { width: 320px; border-radius: 18px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; outline: none; }
+.sp-head { display: flex; align-items: center; gap: 10px; }
+.sp-ic { flex: none; width: 30px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; background: var(--myth-btn); }
+.sp-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-title b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-sub { color: var(--myth-soft); font-size: 12px; }
+.sp-row { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.sp-k { flex: none; width: 58px; font-weight: 600; }
+.sp-v { min-width: 0; color: var(--myth-soft); }
+.sp-soft { color: var(--myth-soft); font-size: 12.5px; }
+.sp-seg { display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--myth-btn); }
+.sp-opt { flex: 1; height: 28px; border: 0; border-radius: 9px; background: rgba(0, 0, 0, 0); color: var(--myth-soft); font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer; }
+.sp-opt:hover { color: var(--text); }
+.sp-opt.on { background: var(--menu-bg); color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 var(--hair) var(--menu-rim); }
+.sp-acts { margin-top: 0; }
+.sh-btn[disabled] { opacity: 0.5; cursor: default; }
+
+/* ---- v0.4.2: zoom indicator, find bar, note, fullscreen ------------------------------- */
+.zoom-chip {
+  flex: none; height: 24px; padding: 0 8px; border-radius: 12px; border: 0;
+  background: var(--chip); color: var(--soft); font: 600 11.5px var(--font);
+  line-height: 24px; cursor: pointer; white-space: nowrap;
+}
+.zoom-chip:hover { background: var(--chip-hi); color: var(--text); }
+.zoom-chip[hidden] { display: none; }
+.findbar {
+  flex: none; width: 320px; height: 38px; margin-left: 8px; padding: 0 4px 0 12px;
+  display: flex; align-items: center; gap: 4px; border-radius: 19px;
+  background: var(--glass); box-shadow: var(--shadow); position: relative;
+}
+html[data-glass="blur"] .findbar, html[data-glass="flat"] .findbar { background: var(--lg-tint-strong); box-shadow: none; }
+.findbar[hidden] { display: none; }
+.find-ico { display: flex; flex: none; }
+.find-input {
+  flex: 1; min-width: 0; height: 30px; padding: 0 2px; border: 0; outline: none;
+  background: rgba(0, 0, 0, 0); color: var(--text); font: 13.5px var(--font);
+}
+.find-input::placeholder { color: var(--dim); }
+.find-count { flex: none; color: var(--dim); font-size: 12px; white-space: nowrap; }
+.find-count.none { color: var(--bad); }
+.findbar .find-btn { width: 28px; height: 28px; border-radius: 9px; flex: none; }
+.findbar .find-btn.up span { transform: rotate(180deg); }
+.toast {
+  flex: none; max-width: 360px; height: 30px; margin-left: 8px; padding: 0 14px;
+  border-radius: 15px; background: var(--ink); color: var(--ink-text);
+  font-size: 12.5px; line-height: 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.toast[hidden] { display: none; }
+/* A fullscreen page covers the window; the chrome stays out of the way underneath. */
+body.fullscreen .titlebar, body.fullscreen .toolbar { visibility: hidden; }

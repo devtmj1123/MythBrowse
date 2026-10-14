@@ -1,0 +1,65 @@
+diff --git a/matching.rs b/matching.rs
+--- a/matching.rs	2026-10-12 08:36:13.584000000 +0000
++++ b/matching.rs	2026-10-12 08:36:29.964000000 +0000
+@@ -755,9 +755,10 @@
+             .transitions
+             .retain(|transition| transition.state != AnimationState::Finished);
+ 
+-        animation_set
+-            .animations
+-            .retain(|animation| animation.state != AnimationState::Finished);
++        // Finished CSS animations stay in the set while their name is still in
++        // `animation-name`: they hold the fill-mode forwards value, and dropping them made the
++        // next stylesheet change (ForCSSRuleChanges) or animation-* change start them again from
++        // 0%. They are removed when canceled (the name leaves the list or display becomes none).
+ 
+         // If the ElementAnimationSet is empty, and don't store it in order to
+         // save memory and to avoid extra processing later.
+diff --git a/servo/animation.rs b/servo/animation.rs
+--- a/servo/animation.rs	2026-10-12 08:36:14.300000000 +0000
++++ b/servo/animation.rs	2026-10-12 08:36:29.964000000 +0000
+@@ -1491,6 +1491,15 @@
+     E: TElement,
+ {
+     let style = new_style.get_ui();
++
++    // Keyframes that leave a property out (`@keyframes f { 0% { opacity: 0 } }`) take its value
++    // from the element's own style. `new_style` already contains the values of the running
++    // animations (the Animations cascade level), so computing the keyframes from it while an
++    // animation runs (a stylesheet change re-submits every animation) would turn the implicit
++    // 100% keyframe into the current animated value and freeze the element there. Use the style
++    // without animation and transition rules as the base instead.
++    let mut base_style = None;
++
+     for (i, name) in style.animation_name_iter().enumerate() {
+         let name = match name.as_atom() {
+             Some(atom) => atom,
+@@ -1540,11 +1549,27 @@
+             AnimationPlayState::Running => AnimationState::Pending,
+         };
+ 
++        let base_style: &Arc<ComputedValues> = base_style.get_or_insert_with(|| {
++            let rule_node = new_style.rules();
++            let without_animations = context.stylist.rule_tree().remove_animation_rules(rule_node);
++            if without_animations == *rule_node {
++                return new_style.clone();
++            }
++            let inputs = CascadeInputs {
++                rules: Some(without_animations),
++                visited_rules: new_style.visited_rules().cloned(),
++                flags: new_style.flags.for_cascade_inputs(),
++            };
++            resolver
++                .cascade_style_and_visited_with_default_parents(inputs)
++                .0
++        });
++
+         let computed_steps = ComputedKeyframe::generate_for_keyframes(
+             element,
+             &keyframe_animation,
+             context,
+-            new_style,
++            base_style,
+             style.animation_timing_function_mod(i),
+             resolver,
+         );

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- Tasks: what Myth is doing in background tabs (MythDesk "Tasks" wide view on its sky).
+     Each conversation that used the browser is a task: its step, its hidden tabs with the
+     latest screenshot, Peek (live view), Take over (open the page as a normal tab and stop
+     the task), Stop, and any action waiting for the user's OK. Data via /api/tasks,
+     /api/task_shot, /api/task_takeover, /api/task_stop, /api/chat_approve. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mb-token" content="{{MB_TOKEN}}">
+  <meta name="mb-glass" content="{{MB_GLASS}}">
+  <meta name="mb-transparency" content="{{MB_TRANSPARENCY}}">
+  <meta name="mb-reduce-transparency" content="{{MB_REDUCE_TRANSPARENCY}}">
+  <meta name="mb-theme-hour" content="{{MB_THEME_HOUR}}">
+  <title>Tasks</title>
+  <link rel="stylesheet" href="design/tokens.css">
+  <link rel="stylesheet" href="home.css">
+  <script src="design/theme.js"></script>
+  <script src="design/icons.js"></script>
+  <script src="design/motion.js"></script>
+</head>
+<body class="sky-page library-page">
+  <canvas id="sky" data-above="88" data-bleed="12" aria-hidden="true"></canvas>
+  <main class="library tasks">
+    <header><h1>Tasks</h1><span class="soft">What Myth is doing in background tabs.</span></header>
+    <div id="tasks"></div>
+    <section id="empty" class="glass panel" hidden>
+      <p class="list-empty">No tasks yet. Ask Myth to do something on the web, for example
+        <span class="quote">open example.com and tell me what it says</span>, and it shows up here.</p>
+    </section>
+  </main>
+
+  <div id="peek" class="sheet-wrap" hidden>
+    <section class="sheet glass peek-sheet" data-glass="f" role="dialog" aria-labelledby="peek-title">
+      <header class="sheet-head">
+        <h2 id="peek-title">Peek</h2>
+        <div class="peek-acts">
+          <button id="peek-takeover" class="ghost" type="button"><span data-icon="takeover" data-size="14" data-role="soft"></span>Take over</button>
+          <button id="peek-close" class="tb-icon" type="button" aria-label="Close"><span data-icon="close" data-size="16" data-role="soft"></span></button>
+        </div>
+      </header>
+      <p id="peek-url" class="soft small peek-url"></p>
+      <div class="peek-frame"><img id="peek-img" alt=""></div>
+    </section>
+  </div>
+  <script src="design/sky.js"></script>
+  <script src="tasks.js"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+diff --git a/dom/html/htmlmediaelement.rs b/dom/html/htmlmediaelement.rs
+index bca713d..5f00304 100644
+--- a/dom/html/htmlmediaelement.rs
++++ b/dom/html/htmlmediaelement.rs
+@@ -2102,6 +2102,16 @@ impl HTMLMediaElement {
+     }
+ 
+     fn create_media_player(&self, resource: &Resource) -> Result<(), ()> {
++        // MythBrowse patch 0006: with no playback backend (servo-media's dummy backend, which
++        // answers "no" to every can_play_type), the dummy player never reports metadata or an
++        // error, so the element kept its delaying-the-load-event flag forever and the
++        // document never fired `load` (google.com results with a pronunciation
++        // `<audio preload>` stayed "loading" for good). Fail the resource as unsupported
++        // instead: MEDIA_ERR_SRC_NOT_SUPPORTED, `error` event, load event no longer delayed.
++        if !media_backend_can_play() {
++            warn!("No media playback backend: media resource not loaded");
++            return Err(());
++        }
+         let stream_type = match *resource {
+             Resource::Object => {
+                 if let Some(ref src_object) = *self.src_object.borrow() {
+@@ -4047,3 +4057,24 @@ impl Drop for HTMLMediaElementEventHandler {
+         assert_in_script();
+     }
+ }
++
++/// MythBrowse patch 0006: whether the media backend can play anything at all (false for
++/// servo-media's dummy backend). Asked once per process.
++fn media_backend_can_play() -> bool {
++    static CAN_PLAY: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *CAN_PLAY.get_or_init(|| {
++        let media = ServoMedia::get();
++        [
++            "audio/mpeg",
++            "audio/mp4",
++            "audio/ogg",
++            "audio/webm",
++            "audio/wav",
++            "video/mp4",
++            "video/webm",
++            "video/ogg",
++        ]
++        .iter()
++        .any(|t| media.can_play_type(t) != SupportsMediaType::No)
++    })
++}

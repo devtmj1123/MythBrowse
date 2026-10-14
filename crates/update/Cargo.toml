@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-update"
+description = "MythBrowse updater: GitHub Releases check (read-only), version compare, installer pick, verified download, msiexec hand-off"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# No Servo and no SQLite: tested on its own (`cargo test -p mythbrowse-update`). The shell glues
+# it to Settings > About (crates/shell/src/settings_host.rs).
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+url.workspace = true
+# Same versions/features as mythbrowse-files / mythbrowse-ai (already in Cargo.lock).
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+sha2 = "0.10"

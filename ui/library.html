@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- Settings (v0.4: every section complete and wired; ui/settings.js), then bookmarks and
+     history. Laid out like MythDesk's wide views (Tasks, Activity) on its sky.
+     Served from the internal origin; data via /api/history, /api/bookmarks, and saved Myth
+     chats via /api/chat_* (ui/chatlist.js). Pages and Chats share one search box. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mb-token" content="{{MB_TOKEN}}">
+  <meta name="mb-glass" content="{{MB_GLASS}}">
+  <meta name="mb-transparency" content="{{MB_TRANSPARENCY}}">
+  <meta name="mb-reduce-transparency" content="{{MB_REDUCE_TRANSPARENCY}}">
+  <meta name="mb-theme-hour" content="{{MB_THEME_HOUR}}">
+  <title>Settings &amp; history</title>
+  <link rel="stylesheet" href="design/tokens.css">
+  <link rel="stylesheet" href="home.css">
+  <script src="design/theme.js"></script>
+  <script src="design/icons.js"></script>
+  <script src="design/motion.js"></script>
+  <script src="design/select.js"></script>
+</head>
+<body class="sky-page library-page">
+  <canvas id="sky" data-above="88" data-bleed="12" aria-hidden="true"></canvas>
+  <main class="library">
+    <header><h1>Settings</h1><span id="where" class="soft">History is kept only on this computer.</span></header>
+
+    <!-- Section links (jump within the page): one segmented rail, never wraps; scrolls
+         sideways when the window is narrow. Short labels; the panels carry the full titles. -->
+    <nav id="set-nav" class="set-nav" aria-label="Settings sections">
+      <a href="#general-panel">General</a><a href="#appearance-panel">Appearance</a><a href="#myth-panel">Myth</a><a href="#privacy-panel" title="Privacy &amp; security">Privacy</a><a href="#cookies-panel" title="Cookies and site data">Cookies</a><a href="#passwords-entry">Passwords</a><a href="#downloads-panel">Downloads</a><a href="#compat-panel" title="Site compatibility">Compatibility</a><a href="#about-panel">About</a><a href="#history-panel">History</a>
+    </nav>
+
+    <!-- General: On startup (startup_pref*), search engine (settings_save?search_engine),
+         address-bar web suggestions (suggest_pref, ui/sitesettings.js). -->
+    <section id="general-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="settings" data-size="15" data-role="soft"></span>General</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">On startup</span>
+          <div id="startup-seg" class="seg gen-seg" role="tablist" aria-label="On startup">
+            <button class="seg-btn" type="button" data-startup="continue">Continue</button>
+            <button class="seg-btn" type="button" data-startup="newtab">New tab</button>
+          </div>
+          <span id="startup-note" class="soft small gen-val">Continue reopens the tabs you had open. After a crash they always come back; private windows never do.</span></div>
+        <div class="gen-row"><span class="gen-label">Search engine</span>
+          <select id="search-engine" aria-label="Search engine"><option value="duckduckgo">DuckDuckGo</option></select>
+          <span class="soft small gen-val">Used for <kbd>?</kbd> searches in the address bar and for &ldquo;Search the web&rdquo; in menus.</span></div>
+        <div class="gen-row"><span class="gen-label">Suggestions</span>
+          <button id="suggest-web" class="sw" role="switch" aria-checked="true" aria-label="Search suggestions"><b></b><i></i></button>
+          <span class="soft small gen-val">What you type in the address bar is sent to DuckDuckGo to suggest searches. Addresses are never sent.</span></div>
+      </div>
+    </section>
+
+    <!-- Appearance: theme (settings_save?theme; design/theme.js on every page), transparency +
+         reduce transparency (glass_params live, prefs_save to keep), motion (prefs_save). -->
+    <section id="appearance-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="moon" data-size="15" data-role="soft"></span>Appearance</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Theme</span>
+          <div id="theme-seg" class="seg gen-seg" role="tablist" aria-label="Theme">
+            <button class="seg-btn" type="button" data-theme="time">Time of day</button>
+            <button class="seg-btn" type="button" data-theme="light">Light</button>
+            <button class="seg-btn" type="button" data-theme="dark">Dark</button>
+          </div>
+          <span class="soft small gen-val">Time of day follows the sky: light by day, dark from dusk.</span></div>
+        <div class="gen-row"><span class="gen-label" id="tr-label">Transparency</span>
+          <div class="tr-box"><div id="tr-slider" class="slider" role="slider" tabindex="0" aria-labelledby="tr-label"></div>
+            <div class="appear-ends"><span>Solid</span><span id="tr-val">Default</span><span>Clear</span></div></div></div>
+        <div class="gen-row"><span class="gen-label">Reduce transparency</span>
+          <button id="set-reduce" class="sw" type="button" role="switch" aria-checked="false" aria-label="Reduce transparency"><b></b><i></i></button>
+          <span id="reduce-note" class="soft small gen-val">Solid surfaces, no blur. Follows Windows&rsquo; &ldquo;Transparency effects&rdquo; until you change it here.</span></div>
+        <div class="gen-row"><span class="gen-label">Motion</span>
+          <div id="motion-seg" class="seg gen-seg" role="tablist" aria-label="Motion">
+            <button class="seg-btn" type="button" data-motion="full">Full</button>
+            <button class="seg-btn" type="button" data-motion="reduced">Reduced</button>
+            <button class="seg-btn" type="button" data-motion="off">Off</button>
+          </div>
+          <span id="motion-note" class="soft small gen-val">Reduced keeps fades but nothing moves.</span></div>
+      </div>
+    </section>
+
+    <!-- Myth: the model (opens the model sheet), and the welcome again. -->
+    <section id="myth-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>Myth</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Model</span><span id="gen-model" class="soft gen-val"></span>
+          <a id="gen-model-btn" class="pill-btn sm" href="home.html#settings">Change</a></div>
+        <div class="gen-row"><span class="gen-label">Pages</span><span class="soft gen-val">Myth answers from your model. This open-source build never sends screenshots and never opens, clicks or types on pages.</span></div>
+        <div class="gen-row"><span class="gen-label">Welcome</span><span class="soft gen-val">The short tour from your first start: Myth, its model, and importing from another browser.</span>
+          <a id="about-welcome" class="pill-btn sm" href="home.html#welcome">Show again</a></div>
+      </div>
+    </section>
+
+    <!-- Privacy & security: clear browsing data (history_clear, downloads_clear,
+         site_data_clear), keep chats (chat_settings_save), browser identity, and what each site
+         may do (ui/sitesettings.js). Cookies have their own section below. -->
+    <section id="privacy-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="shield" data-size="15" data-role="soft"></span>Privacy &amp; security</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Clear data</span>
+          <span class="soft gen-val">History, chats, downloads list, cookies and site data, cached files.</span>
+          <button id="cbd-open" class="pill-btn sm" type="button">Clear browsing data&hellip;</button></div>
+        <div id="cbd" class="cbd" hidden>
+          <div class="cbd-row"><button class="sw" type="button" role="switch" aria-checked="true" data-cbd="history"><b></b><i></i></button><span><b>Browsing history</b><span class="soft small">Pages you visited, on this computer.</span></span></div>
+          <div class="cbd-row"><button class="sw" type="button" role="switch" aria-checked="false" data-cbd="chats"><b></b><i></i></button><span><b>Myth chats</b><span class="soft small">Saved conversations, pinned ones too.</span></span></div>
+          <div class="cbd-row"><button class="sw" type="button" role="switch" aria-checked="false" data-cbd="downloads"><b></b><i></i></button><span><b>Downloads list</b><span class="soft small">Only the list; the files stay on disk.</span></span></div>
+          <div class="cbd-row"><button class="sw" type="button" role="switch" aria-checked="true" data-cbd="cookies"><b></b><i></i></button><span><b>Cookies and site data</b><span class="soft small">Signs you out of most sites. Local and session storage too.</span></span></div>
+          <div class="cbd-row"><button class="sw" type="button" role="switch" aria-checked="true" data-cbd="cache"><b></b><i></i></button><span><b>Cached files</b><span class="soft small">Pages may load slower the next time.</span></span></div>
+          <div class="cbd-acts"><span id="cbd-msg" class="set-msg"></span>
+            <button id="cbd-cancel" class="pill-btn sm" type="button">Cancel</button>
+            <button id="cbd-go" class="pill-btn sm navy" type="button">Clear now</button></div>
+        </div>
+        <div class="gen-row"><span class="gen-label">Keep chats</span>
+          <div id="keep-seg" class="seg gen-seg" role="tablist" aria-label="Keep chats">
+            <button class="seg-btn" type="button" data-keep="forever">Forever</button>
+            <button class="seg-btn" type="button" data-keep="90">90 days</button>
+            <button class="seg-btn" type="button" data-keep="30">30 days</button>
+          </div>
+          <span id="keep-note" class="soft small gen-val">Pinned chats are always kept. Private windows save nothing.</span></div>
+        <div class="gen-row"><span class="gen-label">Browser identity</span>
+          <div id="ua-seg" class="seg gen-seg" role="tablist" aria-label="Browser identity">
+            <button class="seg-btn" type="button" data-ua="firefox">Firefox (recommended)</button>
+            <button class="seg-btn" type="button" data-ua="chrome">Chrome</button>
+            <button class="seg-btn" type="button" data-ua="servo">Servo</button>
+          </div>
+          <span id="ua-note" class="soft small gen-val">What MythBrowse tells sites it is. Firefox works on the most sites; some refuse Servo. Open pages change after a reload.</span></div>
+        <div class="gen-row"><span class="gen-label">Cookies</span>
+          <span class="soft gen-val">Every site's cookies, and which sites may keep them.</span>
+          <a class="pill-btn sm" href="#cookies-panel" data-jump>Manage</a></div>
+      </div>
+      <div class="panel-head sub-head"><div class="w-title">Site permissions</div></div>
+      <div id="sites" class="ss-list"></div>
+      <p id="sites-empty" class="soft small ss-empty">No site has asked for a permission yet. When you choose &ldquo;Remember for this site&rdquo;, it shows here.</p>
+    </section>
+
+    <!-- Cookies and site data (v0.4.2, ui/cookies.js): sites, per-site policy, each site's
+         cookies without values, delete one / clear site / clear all, clear on exit. -->
+    <section id="cookies-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="globe" data-size="15" data-role="soft"></span>Cookies and site data <span id="ck-count" class="count"></span></div>
+        <button id="ck-clear-all" class="pill-btn sm" type="button">Clear all cookies</button>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Clear on exit</span>
+          <button id="ck-exit" class="sw" type="button" role="switch" aria-checked="false" aria-label="Clear cookies when MythBrowse closes"><b></b><i></i></button>
+          <span class="soft small gen-val">Delete cookies when MythBrowse closes, except sites set to Allow.</span></div>
+        <!-- v0.4.2 prep: off by default until the founder decides (docs/COOKIES.md). -->
+        <div class="gen-row"><span class="gen-label">Stay signed in</span>
+          <button id="ck-keep" class="sw" type="button" role="switch" aria-checked="false" aria-label="Stay signed in to sites after restart"><b></b><i></i></button>
+          <span id="ck-keep-val" class="soft small gen-val">Stay signed in to sites after restart. Cookies are saved encrypted for this user; a change applies the next time MythBrowse starts.</span></div>
+        <div class="gen-row"><span class="gen-label">Third-party</span>
+          <span class="ck-tag">Not supported yet</span>
+          <span id="ck-3p" class="soft small gen-val"></span></div>
+        <p id="ck-persist" class="soft small ck-note" hidden>Cookies are not kept after MythBrowse closes, so every site signs you out at exit (turn on Stay signed in to change that). Allow, Block and Clear on exit already apply while it runs.</p>
+        <div class="gen-row ck-tools">
+          <label class="search-box field ck-search"><span data-icon="search" data-size="14" data-role="soft"></span>
+            <input id="ck-filter" type="search" placeholder="Search sites" aria-label="Search sites" spellcheck="false"></label>
+          <span id="ck-msg" class="set-msg"></span></div>
+      </div>
+      <ul id="ck-sites" class="ck-sites"></ul>
+      <p id="ck-empty" class="soft small ss-empty" hidden>No site keeps cookies or storage.</p>
+    </section>
+
+    <!-- Passwords & import (passwords.html). -->
+    <section id="passwords-entry" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="key" data-size="15" data-role="soft"></span>Passwords &amp; import</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Passwords</span><span class="soft gen-val">Encrypted on this computer. Myth never sees them.</span>
+          <a class="pill-btn sm" href="passwords.html">Manage</a></div>
+        <div class="gen-row"><span class="gen-label">Import</span><span class="soft gen-val">Bookmarks, history and passwords from Chrome or Edge, or a password CSV file.</span>
+          <a class="pill-btn sm" href="passwords.html#import-panel">Import</a></div>
+      </div>
+    </section>
+
+    <!-- Downloads: folder (downloads_folder_pick / _reset, settings), Save as each time
+         (settings_save?ask_save), open the folder (downloads_folder) or the Downloads page. -->
+    <section id="downloads-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="download" data-size="15" data-role="soft"></span>Downloads</div>
+        <a class="ghost" href="downloads.html">Show downloads</a>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Location</span>
+          <span id="dl-folder" class="gen-val dl-folder mono-path"></span>
+          <button id="dl-open" class="pill-btn sm" type="button">Open</button>
+          <button id="dl-change" class="pill-btn sm" type="button">Change&hellip;</button>
+          <button id="dl-reset" class="pill-btn sm" type="button" hidden>Use Downloads</button></div>
+        <div class="gen-row"><span class="gen-label">Ask each time</span>
+          <button id="dl-ask" class="sw" type="button" role="switch" aria-checked="false" aria-label="Ask where to save each file"><b></b><i></i></button>
+          <span class="soft small gen-val">Choose where to save every download in a Save as dialog.</span></div>
+        <p id="dl-msg" class="set-msg"></p>
+      </div>
+    </section>
+
+    <!-- Site compatibility: what the fixes do and where they are managed (the compat icon in
+         the address bar; its ops are chrome-only). -->
+    <section id="compat-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="compat" data-size="15" data-role="soft"></span>Site compatibility</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Site fixes</span><span class="soft gen-val">MythBrowse runs on Servo. When a page breaks, built-in fixes (polyfills, per-site rules) step in automatically.</span></div>
+        <div class="gen-row"><span class="gen-label">Rule updates</span>
+          <button id="rules-auto" class="sw" type="button" role="switch" aria-checked="true" aria-label="Automatically update site-fix rules"><b></b><i></i></button>
+          <span id="rules-note" class="soft small gen-val">Automatically update site-fix rules: signed, declarative fixes that help sites work in this engine. Nothing about you is sent.</span></div>
+        <div class="gen-row"><span class="gen-label">Per site</span><span class="soft gen-val">Open a page, then the compat icon by the bookmark star: re-check, reader view, &ldquo;Ask Myth to fix&rdquo;, and turn a site&rsquo;s fixes off or on.</span></div>
+        <div class="gen-row"><span class="gen-label">Report</span><span class="soft gen-val">A site that still breaks?</span>
+          <a class="pill-btn sm" href="https://github.com/devtmj1123/MythBrowse/issues/new" target="_blank" rel="noopener">Report a site</a></div>
+      </div>
+    </section>
+    <!-- cloud_sync:begin (cut out when served by a build without the cloud_sync feature) -->
+    <!-- Account + end-to-end encrypted sync (/api/sync_*). Passwords and passphrases go to the
+         shell in the x-mb-secret header, never in a URL, and are cleared from the form after use. -->
+    <section id="sync-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="lock" data-size="15" data-role="soft"></span>Sync <span id="sync-state" class="count"></span></div>
+        <button id="sync-now" class="ghost" type="button" hidden>Sync now</button>
+        <button id="sync-out" class="ghost" type="button" hidden>Sign out</button>
+      </div>
+      <div class="sync-body">
+        <form id="sync-account" class="sync-form" hidden autocomplete="off">
+          <p class="soft small">Sign in to sync bookmarks, history and Myth chats across your computers. Everything is encrypted on this device first; the server only stores ciphertext.</p>
+          <label class="set-row"><span class="set-label">Email</span><input id="sync-email" class="field" type="email" spellcheck="false"></label>
+          <label class="set-row"><span class="set-label">Account password</span><input id="sync-password" class="field" type="password"></label>
+          <div class="sync-acts"><button id="sync-signin" class="primary" type="submit">Sign in</button><button id="sync-signup" class="ghost" type="button">Create account</button></div>
+        </form>
+        <form id="sync-setup" class="sync-form" hidden autocomplete="off">
+          <p class="soft small">Choose a sync passphrase. It is separate from your account password and never leaves this computer; your other computers need it to read your data.</p>
+          <label class="set-row"><span class="set-label">Sync passphrase</span><input id="sync-pass1" class="field" type="password"></label>
+          <label class="set-row"><span class="set-label">Again</span><input id="sync-pass2" class="field" type="password"></label>
+          <div class="sync-acts"><button class="primary" type="submit">Turn on sync</button></div>
+        </form>
+        <form id="sync-unlock" class="sync-form" hidden autocomplete="off">
+          <p class="soft small">This account already syncs. Enter its sync passphrase.</p>
+          <label class="set-row"><span class="set-label">Sync passphrase</span><input id="sync-pass" class="field" type="password"></label>
+          <div class="sync-acts"><button class="primary" type="submit">Unlock</button><button id="sync-forgot" class="ghost" type="button">Forgot passphrase</button></div>
+        </form>
+        <form id="sync-recover" class="sync-form" hidden autocomplete="off">
+          <p class="soft small">Enter your recovery code and choose a new sync passphrase.</p>
+          <label class="set-row"><span class="set-label">Recovery code</span><input id="sync-code" class="field mono" type="text" spellcheck="false"></label>
+          <label class="set-row"><span class="set-label">New sync passphrase</span><input id="sync-newpass" class="field" type="password"></label>
+          <div class="sync-acts"><button class="primary" type="submit">Recover</button><button id="sync-back" class="ghost" type="button">Back</button></div>
+        </form>
+        <div id="sync-code-box" class="sync-form" hidden>
+          <p><strong>Save your recovery code.</strong> It is the only way back in if you forget the sync passphrase. It is shown once.</p>
+          <code id="sync-code-text" class="recovery"></code>
+          <div class="sync-acts"><button id="sync-copy" class="ghost" type="button">Copy</button><button id="sync-saved" class="primary" type="button">I saved it</button></div>
+        </div>
+        <div id="sync-chats-row" class="sync-chats" hidden>
+          <button id="sync-chats" class="sw" role="switch" aria-checked="true" aria-label="Sync chats"><b></b><i></i></button>
+          <span>Sync chats with Myth <span class="soft small">(end-to-end encrypted, like everything else)</span></span>
+        </div>
+        <p id="sync-info" class="soft small" hidden></p>
+        <p id="sync-msg" class="set-msg"></p>
+      </div>
+    </section>
+    <!-- cloud_sync:end -->
+
+    <!-- About: version, build, renderer, updates (update_* / settings_save?update_auto),
+         licenses and links. -->
+    <section id="about-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><img class="about-logo" src="design/logo.svg" alt="" width="15" height="15">About MythBrowse</div>
+      </div>
+      <div class="gen-body">
+        <div class="gen-row"><span class="gen-label">Version</span><span id="about-version" class="gen-val"></span></div>
+        <div class="gen-row"><span class="gen-label">Build</span><span id="about-commit" class="soft gen-val mono-path"></span></div>
+        <div class="gen-row"><span class="gen-label">Renderer</span><span id="about-renderer" class="soft gen-val"></span></div>
+        <div class="gen-row upd-row"><span class="gen-label">Updates</span>
+          <span id="upd-text" class="gen-val upd-text"><span id="upd-dot" class="upd-dot" aria-hidden="true"></span><span id="upd-msg">Not checked yet.</span></span>
+          <button id="upd-check" class="pill-btn sm" type="button">Check for updates</button>
+          <button id="upd-install" class="pill-btn sm navy" type="button" hidden>Download &amp; install</button></div>
+        <div id="upd-bar" class="upd-bar" hidden><b></b></div>
+        <div class="gen-row"><span class="gen-label">Check daily</span>
+          <button id="upd-auto" class="sw" type="button" role="switch" aria-checked="true" aria-label="Check for updates automatically"><b></b><i></i></button>
+          <span class="soft small gen-val">Once a day at start-up MythBrowse asks GitHub for the latest release (read-only; nothing about you is sent). Installing always waits for you.</span></div>
+        <div class="gen-row lic-row"><span class="gen-label">Licenses</span>
+          <div class="gen-val lic">
+            <p><b>Servo</b> web engine, Stylo and SpiderMonkey: <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0</a>. Source: <a href="https://github.com/servo/servo" target="_blank" rel="noopener">github.com/servo/servo</a>. MythBrowse&rsquo;s small fixes to Servo files stay under the MPL-2.0.</p>
+            <p><b>ANGLE</b> (BSD 3-Clause), <b>SQLite</b> (public domain), <b>rustls</b>, <b>ureq</b>, <b>winit</b> and other Rust crates (MIT / Apache-2.0).</p>
+            <p>MythBrowse &copy; 2026 JustMyth / Tan Ming Jing: <a href="https://www.mozilla.org/MPL/2.0/" target="_blank" rel="noopener">Mozilla Public License 2.0</a>, source at <a href="https://github.com/devtmj1123/MythBrowse" target="_blank" rel="noopener">github.com/devtmj1123/MythBrowse</a>. The licences and notices of every component are installed next to mythbrowse.exe (LICENSE, NOTICE, THIRD_PARTY_NOTICES.txt). Myth&rsquo;s answers come from the AI model you configure and can be wrong.</p>
+          </div></div>
+        <div class="gen-row"><span class="gen-label">Links</span>
+          <div class="gen-val links-row">
+            <a class="pill-btn sm" href="https://github.com/devtmj1123/MythBrowse/releases" target="_blank" rel="noopener">Release notes</a>
+            <a class="pill-btn sm" href="https://github.com/devtmj1123/MythBrowse/issues" target="_blank" rel="noopener">Report a problem</a>
+            <a class="pill-btn sm" href="https://github.com/devtmj1123/MythBrowse" target="_blank" rel="noopener">MythBrowse on GitHub</a>
+          </div></div>
+      </div>
+    </section>
+
+    <section id="bookmarks-panel" class="glass panel">
+      <div class="panel-head">
+        <div class="w-title"><span data-icon="star" data-size="15" data-role="soft"></span>Bookmarks <span id="bookmark-count" class="count"></span></div>
+      </div>
+      <ul id="bookmarks"></ul>
+    </section>
+
+    <section id="history-panel" class="glass panel">
+      <div class="panel-head">
+        <div id="lib-tabs" class="seg lib-tabs" role="tablist">
+          <button class="seg-btn on" type="button" data-tab="pages" role="tab">Pages</button>
+          <button class="seg-btn" type="button" data-tab="chats" role="tab">Chats</button>
+        </div>
+        <span class="w-title"></span>
+        <label id="search" class="search-box field">
+          <span data-icon="search" data-size="15" data-role="soft"></span>
+          <input id="filter" type="search" placeholder="Search pages" aria-label="Search history">
+        </label>
+        <button id="clear" class="ghost" type="button">
+          <span id="clear-icon" data-icon="trash" data-size="14" data-role="soft"></span><span id="clear-text">Clear pages</span>
+        </button>
+      </div>
+      <div id="chat-settings" class="chat-settings" hidden>
+        <button id="clear-both" class="ghost" type="button"><span id="clear-both-text">Clear pages and chats</span></button>
+      </div>
+      <ul id="history"></ul>
+      <div id="chats" class="chats-list" hidden></div>
+    </section>
+  </main>
+  <script src="design/sky.js"></script>
+  <script src="chatlist.js"></script>
+  <script src="library.js"></script>
+  <script src="sitesettings.js"></script>
+  <script src="cookies.js"></script>
+  <script src="settings.js"></script>
+</body>
+</html>

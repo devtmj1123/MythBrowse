@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: MPL-2.0. Copyright (c) 2026 JustMyth / Tan Ming Jing -->
+<!-- MythBrowse Windows installer (WiX Toolset v5, `wix build`; see packaging/windows/README.md).
+     Per-machine install to Program Files\JustMyth\MythBrowse with everything the release zip
+     ships (mythbrowse.exe, ANGLE libEGL/libGLESv2, the VC++ runtime DLLs, LICENSE, NOTICE,
+     README.md), a Start-menu shortcut and the usual Apps & features (uninstall) entry.
+     Unsigned for now.
+     Setup UI (WixUI_InstallDir, WixToolset.UI.wixext): welcome, license (installer/License.rtf),
+     install folder, an options page (desktop shortcut), ready, progress, finish with a
+     "Launch MythBrowse" checkbox (WixShellExec, WixToolset.Util.wixext). Branding bitmaps from
+     make_installer_art.py. A quiet install (msiexec /qn, the CI smoke test) shows no UI, takes the
+     defaults (desktop shortcut on) and never launches the app.
+     Build: wix build mythbrowse.wxs -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext
+            -d Version=0.0.1 -d SourceDir=<zip contents> -o MythBrowse.msi
+     (once: wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2)
+     Identity: ProductName / UpgradeCode / InstallDirName default to the open-source build
+     ("MythBrowse (Open Build)", its own UpgradeCode, Program Files\JustMyth\MythBrowse Open Build),
+     so a source build installs side by side with an official JustMyth build and never replaces it.
+     Official builds pass their own values with -d. Each UpgradeCode is fixed forever: every MSI
+     of one identity replaces the installed one of that identity (MajorUpgrade; same-version
+     reinstalls allowed so CI builds of one version upgrade too). -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <?ifndef ProductName?>
+  <?define ProductName = "MythBrowse (Open Build)"?>
+  <?endif?>
+  <?ifndef UpgradeCode?>
+  <?define UpgradeCode = "C0E66560-9E82-48D9-905C-B8DF0233B420"?>
+  <?endif?>
+  <?ifndef InstallDirName?>
+  <?define InstallDirName = "MythBrowse Open Build"?>
+  <?endif?>
+  <Package Name="$(var.ProductName)"
+           Manufacturer="JustMyth"
+           Version="$(var.Version)"
+           UpgradeCode="$(var.UpgradeCode)"
+           Scope="perMachine"
+           Language="1033"
+           Compressed="yes">
+    <SummaryInformation Description="MythBrowse web browser" Manufacturer="JustMyth" />
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of $(var.ProductName) is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- App icon (packaging/icons/make_icons.py): Apps & features entry and the Start-menu
+         shortcut. The .exe carries the same icon as a resource (crates/shell/build.rs). -->
+    <Icon Id="MythBrowseIcon.ico" SourceFile="$(sys.SOURCEFILEDIR)mythbrowse.ico" />
+    <Property Id="ARPPRODUCTICON" Value="MythBrowseIcon.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/devtmj1123/MythBrowse" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="JustMythFolder" Name="JustMyth">
+        <Directory Id="INSTALLFOLDER" Name="$(var.InstallDirName)" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- ===== Setup UI ===== -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(sys.SOURCEFILEDIR)installer\License.rtf" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(sys.SOURCEFILEDIR)installer\dialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(sys.SOURCEFILEDIR)installer\banner.bmp" />
+    <!-- Options page: a desktop shortcut (on by default, also for quiet installs). -->
+    <Property Id="INSTALLDESKTOPSHORTCUT" Value="1" />
+    <!-- Finish page: "Launch MythBrowse", ticked. Only the UI's Finish button runs it. -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch $(var.ProductName)" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[INSTALLFOLDER]mythbrowse.exe" />
+    <CustomAction Id="LaunchMythBrowse" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)"
+                  DllEntry="WixShellExec" Impersonate="yes" Return="ignore" />
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+      <!-- InstallDirDlg -> MbOptionsDlg -> VerifyReadyDlg (Order 5 / 2 beat WixUI's own
+           NewDialog events on the same buttons). -->
+      <Publish Dialog="InstallDirDlg" Control="Next" Event="NewDialog" Value="MbOptionsDlg"
+               Order="5" Condition="WIXUI_INSTALLDIR_VALID=&quot;1&quot;" />
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="MbOptionsDlg"
+               Order="2" Condition="NOT Installed" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchMythBrowse"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed AND NOT REMOVE" />
+
+      <Dialog Id="MbOptionsDlg" Width="370" Height="270" Title="!(loc.InstallDirDlg_Title)">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44"
+                 TabSkip="no" Text="!(loc.InstallDirDlgBannerBitmap)" />
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes"
+                 NoPrefix="yes" Text="{\WixUI_Font_Title}Shortcuts" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15"
+                 Transparent="yes" NoPrefix="yes" Text="Choose where MythBrowse shows up." />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="StartMenuNote" Type="Text" X="20" Y="60" Width="330" Height="18" NoPrefix="yes"
+                 Text="MythBrowse is added to the Start menu." />
+        <Control Id="DesktopShortcut" Type="CheckBox" X="20" Y="84" Width="330" Height="17"
+                 Property="INSTALLDESKTOPSHORTCUT" CheckBoxValue="1"
+                 Text="Create a &amp;desktop shortcut" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17"
+                 Text="!(loc.WixUIBack)">
+          <Publish Event="NewDialog" Value="InstallDirDlg" />
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes"
+                 Text="!(loc.WixUINext)">
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17"
+                 Cancel="yes" Text="!(loc.WixUICancel)">
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
+        </Control>
+      </Dialog>
+    </UI>
+
+    <!-- Everything in the packaged folder (the same files as the zip). -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.SourceDir)\**" />
+    </ComponentGroup>
+
+    <!-- Start menu: MythBrowse (all users). -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="MythBrowseShortcut"
+                  Name="$(var.ProductName)"
+                  Description="MythBrowse web browser"
+                  Target="[INSTALLFOLDER]mythbrowse.exe"
+                  Icon="MythBrowseIcon.ico"
+                  WorkingDirectory="INSTALLFOLDER">
+          <!-- Same id the app sets on itself (mythbrowse-notify APP_ID): toasts of the
+               unpackaged build show under MythBrowse. -->
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="JustMyth.MythBrowse" />
+        </Shortcut>
+        <RegistryValue Root="HKLM" Key="Software\JustMyth\$(var.InstallDirName)" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <!-- Desktop (all users' desktop for this per-machine install), when ticked. -->
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Condition="INSTALLDESKTOPSHORTCUT = 1">
+        <Shortcut Id="MythBrowseDesktopShortcut"
+                  Name="$(var.ProductName)"
+                  Description="MythBrowse web browser"
+                  Target="[INSTALLFOLDER]mythbrowse.exe"
+                  Icon="MythBrowseIcon.ico"
+                  WorkingDirectory="INSTALLFOLDER">
+          <ShortcutProperty Key="System.AppUserModel.ID" Value="JustMyth.MythBrowse" />
+        </Shortcut>
+        <RegistryValue Root="HKLM" Key="Software\JustMyth\$(var.InstallDirName)" Name="DesktopShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="$(var.ProductName)" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+  </Package>
+</Wix>

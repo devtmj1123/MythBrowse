@@ -1,0 +1,30 @@
+diff --git a/constellation.rs b/constellation.rs
+--- a/constellation.rs
++++ b/constellation.rs
+@@ -3863,9 +3863,23 @@
+                 };
+                 if let Err(e) = result {
+                     self.handle_send_error(parent_pipeline_id, e);
+-                } else if let Some((sender, id)) = &self.webdriver_load_status_sender {
+-                    if source_id == *id {
+-                        let _ = sender.send(WebDriverLoadStatus::NavigationStop);
++                } else {
++                    if let Some((sender, id)) = &self.webdriver_load_status_sender {
++                        if source_id == *id {
++                            let _ = sender.send(WebDriverLoadStatus::NavigationStop);
++                        }
++                    }
++                    // MythBrowse (servo-constellation 0001): a pipeline that is still a pending
++                    // change of this frame (no document yet) asked to navigate the frame: script
++                    // hands a redirect that must run in another event loop back to us
++                    // (servo-script 0004). The parent now starts a new pipeline for it, so the
++                    // pending one is superseded; discard it instead of leaving it pending forever.
++                    if source_id != pipeline_id &&
++                        self.pending_changes
++                            .iter()
++                            .any(|change| change.new_pipeline_id == source_id)
++                    {
++                        self.handle_abort_load_url_msg(source_id);
+                     }
+                 }
+ 

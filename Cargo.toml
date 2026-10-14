@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/shell",
+    "crates/engine",
+    "crates/ai",
+    "crates/compat",
+    "crates/blocker",
+    "crates/sync",
+    "crates/storage",
+    "crates/files",
+    "crates/passwords",
+    "crates/notify",
+    "crates/update",
+]
+# Vendored upstream code is not ours to fmt/clippy; it is only a [patch] target.
+exclude = ["third_party"]
+# Plain `cargo build` builds the browser; light crates are tested with `-p`.
+default-members = ["crates/shell"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+# Servo 0.1.x requires rustc >= 1.86; the pinned toolchain (rust-toolchain.toml) matches Servo's own.
+rust-version = "1.86"
+license = "MPL-2.0"
+publish = false
+authors = ["Tan Ming Jing (JustMyth)"]
+repository = "https://github.com/devtmj1123/MythBrowse"
+
+[workspace.dependencies]
+# Servo LTS line (0.1.x). Track monthly releases (0.7+) on a separate branch.
+servo = { version = "0.1.4", default-features = true }
+euclid = "0.22"
+url = "2.5"
+winit = "0.30.13"
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "2"
+log = "0.4"
+serde_json = "1"
+# Same version + features Servo's own storage uses (servo-storage 0.1.4), so no new C build.
+rusqlite = { version = "0.37", features = ["bundled"] }
+# `WebResourceResponse` headers are `http` 1.x types (as in servo-embedder-traits).
+http = "1.4"
+
+mythbrowse-engine = { path = "crates/engine", default-features = false }
+mythbrowse-ai = { path = "crates/ai" }
+mythbrowse-compat = { path = "crates/compat" }
+mythbrowse-blocker = { path = "crates/blocker" }
+mythbrowse-sync = { path = "crates/sync" }
+mythbrowse-storage = { path = "crates/storage" }
+mythbrowse-files = { path = "crates/files" }
+mythbrowse-passwords = { path = "crates/passwords" }
+mythbrowse-notify = { path = "crates/notify" }
+mythbrowse-update = { path = "crates/update" }
+
+[profile.release]
+debug = false
+# Servo is big: keep CI release builds reasonably fast. LTO is reserved for `production`.
+codegen-units = 16
+
+[profile.production]
+inherits = "release"
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# Vendored Servo crates carrying MythBrowse fixes (see third_party/README.md). Remove an
+# entry once its fix ships in the Servo release line we track.
+[patch.crates-io]
+servo-script = { path = "third_party/servo-script" }
+servo-net = { path = "third_party/servo-net" }
+stylo = { path = "third_party/stylo" }
+servo-constellation = { path = "third_party/servo-constellation" }
+# No panic when a fragment's scrollable overflow is read before the overflow pass reached it
+# (Passwords page, v0.4 feature shots). See third_party/README.md (servo-layout 0001).
+servo-layout = { path = "third_party/servo-layout" }
+# Windows: choose a hardware D3D11 adapter, never the Microsoft Basic Render Driver (WARP)
+# when a GPU exists; logs the adapter. See third_party/README.md (surfman 0001).
+surfman = { path = "third_party/surfman" }

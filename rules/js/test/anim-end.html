@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- In-engine check for rule site.css-animation-implicit-end (see README.md). Copyright (c) 2026 JustMyth / Tan Ming Jing. SPDX-License-Identifier: MPL-2.0. -->
+<style id=dyn></style>
+<style>
+@keyframes implicitTo { 0% { opacity: 0 } }
+@keyframes explicitBoth { 0% { opacity: 0 } 100% { opacity: 1 } }
+@keyframes implicitTransform { 0% { transform: translateX(100px) } }
+@keyframes ownValue { 0% { opacity: 0 } }
+@keyframes explicitForwards { 0% { opacity: .2 } 100% { opacity: .7 } }
+.a1 { animation: implicitTo 1s linear 0s both }
+.a2 { animation: explicitBoth 1s linear 0s both }
+.a3 { animation: implicitTransform 1s linear 0s both }
+.a4 { opacity: .3; animation: ownValue 1s linear 0s both }
+.a5 { animation: explicitForwards 1s linear 0s forwards }
+</style>
+<div id=d1 class=a1>implicit 100% (opacity)</div>
+<div id=d2 class=a2>explicit 0%/100%</div>
+<div id=d3 class=a3>implicit 100% (transform)</div>
+<div id=d4 class=a4>implicit 100%, own opacity .3</div>
+<div id=d5 class=a5>explicit, fill forwards (.7)</div>
+<script>
+// A CSS-in-JS style rule insertion half-way through the animations: Servo then recomputes
+// the keyframes from the animated style (the bug the rule works around).
+setTimeout(function () { document.getElementById("dyn").sheet.insertRule(".unrelated { color: red }"); }, 500);
+</script>

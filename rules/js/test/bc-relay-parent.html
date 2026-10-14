@@ -1,0 +1,9 @@
+<!doctype html>
+<!-- In-engine check for rule site.broadcast-channel-frame-relay (see README.md). Copyright (c) 2026 JustMyth / Tan Ming Jing. SPDX-License-Identifier: MPL-2.0. -->
+<script>
+window.got = [];
+var ch = new BroadcastChannel("mb-relay-test");
+ch.onmessage = function (e) { got.push(JSON.stringify(e.data)); };
+</script>
+<iframe src="http://127.0.0.2:8767/r"></iframe>
+<iframe src="bc-relay-child.html?same"></iframe>

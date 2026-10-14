@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 JustMyth / Tan Ming Jing
+[package]
+name = "mythbrowse-storage"
+description = "MythBrowse local profile storage: history, bookmarks and saved chats (SQLite)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+rusqlite.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+url.workspace = true
+mythbrowse-sync.workspace = true
+# Random conversation ids (already in Cargo.lock via mythbrowse-sync).
+getrandom = { version = "0.2", features = ["std"] }
+
+[features]
+# `tests/sync_e2e.rs`: the sync client against the real Appwrite project (needs network and
+# `MYTHBROWSE_E2E=1`; see that file). Off by default, so normal test runs stay offline.
+e2e = []
+
+[dev-dependencies]
+# For tests/sync_e2e.rs only (same versions/features as mythbrowse-sync and the shell).
+ureq = { version = "3.4", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+rustls.workspace = true
+zeroize = "1.8"
