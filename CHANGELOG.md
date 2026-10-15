@@ -34,14 +34,23 @@ First public release of the MythBrowse source under the Mozilla Public License 2
 
 ### Security
 
-- WebCrypto no longer offers the draft ML-DSA-44/65/87 algorithms (`crypto.subtle` calls with
-  those names reject with `NotSupportedError`). Servo 0.1.4 implements them with `ml-dsa` 0.0.4,
-  which has open advisories (CVE-2026-24850, CVE-2026-22705 / RUSTSEC-2025-0144,
-  GHSA-h37v-hp6w-2pp8) and no fixed version on the Servo 0.1 line; see `third_party/README.md`
-  (servo-script 0007). The `ml-dsa` crate is no longer built.
+- ML-DSA is deliberately unsupported: WebCrypto does not offer the draft ML-DSA-44/65/87
+  algorithms (`crypto.subtle` calls with those names reject with `NotSupportedError`).
+  Servo 0.1.4 implements them with `ml-dsa` 0.0.4, which has open advisories (CVE-2026-24850,
+  CVE-2026-22705 / RUSTSEC-2025-0144, GHSA-h37v-hp6w-2pp8) and no fixed version on the Servo
+  0.1 line; see `third_party/README.md` (servo-script 0007). The `ml-dsa` crate is no longer built.
 - Dependency updates: rustls 0.23.46 (RUSTSEC-2026-0346 to -0349), time 0.3.55
   (RUSTSEC-2026-0009), rand 0.8.8 (RUSTSEC-2026-0097), anyhow 1.0.104 (RUSTSEC-2026-0190), and
-  grid 1.0.1, smallbitvec 2.6.1, tar 0.4.46.
+  grid 1.0.1, smallbitvec 2.6.1, tar 0.4.46; wayland-scanner 0.31.11 with quick-xml 0.41.0
+  (RUSTSEC-2026-0194, -0195; a Linux build-time code generator, not part of Windows builds).
+- WebCrypto RSA-OAEP decryption and RSASSA-PKCS1-v1_5 signing now use RSA blinding, as RSA-PSS
+  already did (servo-script 0008). This narrows the timing side channel of `rsa` 0.9.10
+  (RUSTSEC-2023-0071, "Marvin"), which has no fixed release yet; results are unchanged.
+
+### Build
+
+- The declared minimum Rust version (`rust-version`) is 1.92, the toolchain pinned in
+  `rust-toolchain.toml` and the only one CI builds and tests.
 
 ### Changed compared with the preview builds
 

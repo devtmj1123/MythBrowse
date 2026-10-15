@@ -132,8 +132,9 @@ pub(crate) fn decrypt(
             ))));
         },
     };
+    // MythBrowse: decrypt with RSA blinding (RUSTSEC-2023-0071 hardening, patch 0008).
     let plaintext = private_key
-        .decrypt(padding, ciphertext)
+        .decrypt_blinded(&mut OsRng, padding, ciphertext)
         .map_err(|_| Error::Operation(Some("RSA-OAEP failed to decrypt ciphertext".to_string())))?;
 
     // Step 6. Return plaintext.

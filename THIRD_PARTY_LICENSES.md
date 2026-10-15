@@ -541,7 +541,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | profiling | 1.0.17 | MIT OR Apache-2.0 | crates.io | https://github.com/aclysma/profiling |
 | profiling-procmacros | 1.0.17 | MIT OR Apache-2.0 | crates.io | https://github.com/aclysma/profiling |
 | quick-error | 2.0.1 | MIT/Apache-2.0 | crates.io | http://github.com/tailhook/quick-error |
-| quick-xml | 0.39.2 | MIT | crates.io | https://github.com/tafia/quick-xml |
+| quick-xml | 0.41.0 | MIT | crates.io | https://github.com/tafia/quick-xml |
 | quick_cache | 0.6.21 | MIT | crates.io | https://github.com/arthurprs/quick-cache |
 | quote | 1.0.45 | MIT OR Apache-2.0 | crates.io | https://github.com/dtolnay/quote |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | crates.io | https://github.com/r-efi/r-efi |
@@ -825,7 +825,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | wayland-protocols | 0.32.11 | MIT | crates.io | https://github.com/smithay/wayland-rs |
 | wayland-protocols-plasma | 0.3.11 | MIT | crates.io | https://github.com/smithay/wayland-rs |
 | wayland-protocols-wlr | 0.3.11 | MIT | crates.io | https://github.com/smithay/wayland-rs |
-| wayland-scanner | 0.31.10 | MIT | crates.io | https://github.com/smithay/wayland-rs |
+| wayland-scanner | 0.31.11 | MIT | crates.io | https://github.com/smithay/wayland-rs |
 | wayland-sys | 0.31.11 | MIT | crates.io | https://github.com/smithay/wayland-rs |
 | web-sys | 0.3.82 | MIT OR Apache-2.0 | crates.io | https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/web-sys |
 | web-time | 1.1.0 | MIT OR Apache-2.0 | crates.io | https://github.com/daxpedda/web-time |

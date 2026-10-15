@@ -55,7 +55,8 @@ artifact of a run of the `Windows build` workflow.
 
 ## Build from source
 
-Rust 1.92.0 is pinned in `rust-toolchain.toml`.
+Rust 1.92.0 is pinned in `rust-toolchain.toml`; it is also the declared minimum (`rust-version`),
+the only version CI builds and tests.
 
 **Light crates** (no Servo; any OS, a few minutes):
 

@@ -293,13 +293,13 @@ impl AiConfig {
             return Err(ConfigError::UnknownDefault(self.default_provider.clone()));
         }
         for role in Role::ALL {
-            if let Some(name) = self.roles.get(role) {
-                if !self.providers.contains_key(name) {
-                    return Err(ConfigError::UnknownRoleProvider {
-                        role: role.name(),
-                        provider: name.clone(),
-                    });
-                }
+            if let Some(name) = self.roles.get(role)
+                && !self.providers.contains_key(name)
+            {
+                return Err(ConfigError::UnknownRoleProvider {
+                    role: role.name(),
+                    provider: name.clone(),
+                });
             }
         }
         for (name, p) in &self.providers {
@@ -410,12 +410,12 @@ impl ProviderConfig {
             } => (api_key_env.as_deref(), api_key_ref.as_deref()),
             ProviderConfig::Ollama { .. } => (None, None),
         };
-        if let Some(var) = env {
-            if let Some(v) = std::env::var_os(var).and_then(|v| v.into_string().ok()) {
-                let s = crate::secrets::Secret::new(v.trim());
-                if !s.is_empty() {
-                    return Some(s);
-                }
+        if let Some(var) = env
+            && let Some(v) = std::env::var_os(var).and_then(|v| v.into_string().ok())
+        {
+            let s = crate::secrets::Secret::new(v.trim());
+            if !s.is_empty() {
+                return Some(s);
             }
         }
         reference

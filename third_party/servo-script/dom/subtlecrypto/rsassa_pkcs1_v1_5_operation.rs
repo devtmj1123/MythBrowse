@@ -3,8 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use js::context::JSContext;
+// MythBrowse: sign with RSA blinding (RUSTSEC-2023-0071 hardening, patch 0008).
+use pkcs8::rand_core::OsRng;
 use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
-use rsa::signature::{SignatureEncoding, Signer, Verifier};
+use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
 use sha1::Sha1;
 use sha2::{Sha256, Sha384, Sha512};
 
@@ -52,19 +54,19 @@ pub(crate) fn sign(key: &CryptoKey, message: &[u8]) -> Result<Vec<u8>, Error> {
     let signature = match algorithm.hash.name() {
         CryptoAlgorithm::Sha1 => {
             let signing_key = SigningKey::<Sha1>::new(private_key.clone());
-            signing_key.try_sign(message)
+            signing_key.try_sign_with_rng(&mut OsRng, message)
         },
         CryptoAlgorithm::Sha256 => {
             let signing_key = SigningKey::<Sha256>::new(private_key.clone());
-            signing_key.try_sign(message)
+            signing_key.try_sign_with_rng(&mut OsRng, message)
         },
         CryptoAlgorithm::Sha384 => {
             let signing_key = SigningKey::<Sha384>::new(private_key.clone());
-            signing_key.try_sign(message)
+            signing_key.try_sign_with_rng(&mut OsRng, message)
         },
         CryptoAlgorithm::Sha512 => {
             let signing_key = SigningKey::<Sha512>::new(private_key.clone());
-            signing_key.try_sign(message)
+            signing_key.try_sign_with_rng(&mut OsRng, message)
         },
         _ => {
             return Err(Error::Operation(Some(format!(

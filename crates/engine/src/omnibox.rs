@@ -135,10 +135,10 @@ pub fn resolve(input: &str) -> Option<OmniboxTarget> {
 
     // Explicit, navigable URL. (Note "localhost:8080" parses with scheme "localhost",
     // hence the scheme allowlist.)
-    if let Ok(url) = Url::parse(text) {
-        if NAVIGABLE_SCHEMES.contains(&url.scheme()) {
-            return Some(OmniboxTarget::Url(url));
-        }
+    if let Ok(url) = Url::parse(text)
+        && NAVIGABLE_SCHEMES.contains(&url.scheme())
+    {
+        return Some(OmniboxTarget::Url(url));
     }
 
     if !text.contains(char::is_whitespace) && looks_like_host(text) {

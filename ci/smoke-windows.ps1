@@ -14,6 +14,9 @@
 #     cleanly);
 #  4. pointer mapping into the floating page card (a click on a tiny link must navigate) and
 #     a mouse click into the address bar followed by typing.
+#  4b. WebCrypto (ci/webcrypto-check.html on a loopback server): ML-DSA-44/65/87 reject with
+#     NotSupportedError, SHA-256 / HMAC / AES-GCM / ECDSA / Ed25519 / RSA-PSS / RSASSA /
+#     RSA-OAEP / PBKDF2 / HKDF still work (known-answer vectors where standard);
 #  5. Myth against a mock OpenAI-compatible server: streamed chat from the home page and a
 #     question typed on a web page (the open build answers, never acts; no tools are sent);
 #     DPAPI key store self-test; no API key in any log.
@@ -274,6 +277,39 @@ if ($h4 -ne [IntPtr]::Zero) {
   Write-Host "[smoke] run4: no window"; $status = 1
 }
 Stop-Browser $p4 "run4"
+
+# Run 4b: WebCrypto in a secure context (http://127.0.0.1, served by ci/webcrypto_check.py).
+# The page sets its title to "webcrypto PASS n/n" or "webcrypto FAIL k/n" and POSTs a JSON report.
+$wcLog = Join-Path $OutDir "webcrypto.json"
+$wc = Start-Process -FilePath "python" -ArgumentList @("ci/webcrypto_check.py", "--port", "18081", "--log", $wcLog) `
+  -PassThru -RedirectStandardOutput (Join-Path $OutDir "webcrypto-stdout.log") -RedirectStandardError (Join-Path $OutDir "webcrypto-stderr.log")
+$wcUp = $false
+for ($i = 0; $i -lt 60 -and -not $wcUp; $i++) {
+  try { $tc = New-Object System.Net.Sockets.TcpClient; $tc.Connect("127.0.0.1", 18081); $tc.Close(); $wcUp = $true }
+  catch { Start-Sleep -Milliseconds 500 }
+}
+if (-not $wcUp) { Write-Host "[smoke] run4b: WebCrypto page server did not start"; $status = 1 }
+$env:MYTHBROWSE_THEME_HOUR = "10"
+$p4b = Start-Browser "run4b" @("http://127.0.0.1:18081/")
+$t = ""
+for ($i = 0; $i -lt 120; $i++) {
+  Start-Sleep -Seconds 1
+  $p4b.Refresh()
+  if ($p4b.HasExited) { break }
+  $t = $p4b.MainWindowTitle
+  if ($t -match "webcrypto (PASS|FAIL)") { break }
+}
+Write-Host "[smoke] run4b title: '$t' after ~$i s"
+Shot "13-webcrypto"
+Stop-Browser $p4b "run4b"
+Stop-Process -Id $wc.Id -Force -ErrorAction SilentlyContinue
+$wcr = Get-Content $wcLog -Raw -ErrorAction SilentlyContinue
+Write-Host "----- webcrypto.json"; Write-Host $wcr
+$wcOk = $false
+try { $j = ($wcr.Trim() -split "`n")[-1] | ConvertFrom-Json; $wcOk = ($j.ok -eq $true -and $j.total -ge 22)
+  foreach ($r in $j.results) { Write-Host ("[smoke] run4b " + ($(if ($r.ok) { "PASS " } else { "FAIL " })) + $r.name + " " + $r.detail) } } catch { }
+if ($t -notmatch "webcrypto PASS" -or -not $wcOk) { Write-Host "[smoke] run4b: WebCrypto check FAILED"; $status = 1 }
+else { Write-Host "[smoke] run4b: WebCrypto check passed ($($j.passed)/$($j.total))" }
 
 # Run 5: Myth with a mock OpenAI-compatible model (ci/mock_chat.py): a streamed chat reply on
 # the home page, then a question typed in the address bar on a web page. The open build never

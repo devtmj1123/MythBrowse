@@ -577,11 +577,11 @@ impl Decoder {
                     return Ok(false);
                 };
                 if let Some(delta) = choice.get("delta") {
-                    if let Some(t) = delta.get("content").and_then(Value::as_str) {
-                        if !t.is_empty() {
-                            self.content.push_str(t);
-                            on_text(t);
-                        }
+                    if let Some(t) = delta.get("content").and_then(Value::as_str)
+                        && !t.is_empty()
+                    {
+                        self.content.push_str(t);
+                        on_text(t);
                     }
                     if let Some(calls) = delta.get("tool_calls").and_then(Value::as_array) {
                         for c in calls {
@@ -623,11 +623,11 @@ impl Decoder {
                     return Err(stream_error(err));
                 }
                 if let Some(msg) = v.get("message") {
-                    if let Some(t) = msg.get("content").and_then(Value::as_str) {
-                        if !t.is_empty() {
-                            self.content.push_str(t);
-                            on_text(t);
-                        }
+                    if let Some(t) = msg.get("content").and_then(Value::as_str)
+                        && !t.is_empty()
+                    {
+                        self.content.push_str(t);
+                        on_text(t);
                     }
                     if let Some(calls) = msg.get("tool_calls").and_then(Value::as_array) {
                         for c in calls {

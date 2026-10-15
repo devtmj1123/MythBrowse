@@ -260,13 +260,13 @@ pub fn asset_with(
         .unwrap_or(Cow::Borrowed(*embedded));
     let mime = mime_for(name);
     let text_ui = mime.starts_with("text/html") || mime.starts_with("text/javascript");
-    if !features.cloud_sync && text_ui {
-        if let Ok(text) = std::str::from_utf8(&body) {
-            if text.contains(CLOUD_SYNC_BEGIN) {
-                let cut = strip_marked(text, CLOUD_SYNC_BEGIN, CLOUD_SYNC_END);
-                return Some((mime, Cow::Owned(cut.into_bytes())));
-            }
-        }
+    if !features.cloud_sync
+        && text_ui
+        && let Ok(text) = std::str::from_utf8(&body)
+        && text.contains(CLOUD_SYNC_BEGIN)
+    {
+        let cut = strip_marked(text, CLOUD_SYNC_BEGIN, CLOUD_SYNC_END);
+        return Some((mime, Cow::Owned(cut.into_bytes())));
     }
     Some((mime, body))
 }
@@ -1290,14 +1290,14 @@ pub fn render_asset(
     token: &str,
     theme_hour: Option<f64>,
 ) -> Vec<u8> {
-    if mime.starts_with("text/html") {
-        if let Ok(text) = std::str::from_utf8(&body) {
-            let hour = theme_hour.map(|h| h.to_string()).unwrap_or_default();
-            return text
-                .replace(TOKEN_PLACEHOLDER, token)
-                .replace(THEME_HOUR_PLACEHOLDER, &hour)
-                .into_bytes();
-        }
+    if mime.starts_with("text/html")
+        && let Ok(text) = std::str::from_utf8(&body)
+    {
+        let hour = theme_hour.map(|h| h.to_string()).unwrap_or_default();
+        return text
+            .replace(TOKEN_PLACEHOLDER, token)
+            .replace(THEME_HOUR_PLACEHOLDER, &hour)
+            .into_bytes();
     }
     body.into_owned()
 }

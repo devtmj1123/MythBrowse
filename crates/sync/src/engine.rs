@@ -241,12 +241,13 @@ pub fn sync(
     for rec in pending {
         // A newer version may have just arrived from another device.
         let current = local.get(rec.kind, &rec.id).map_err(SyncError::Local)?;
-        if let Some(cur) = &current {
-            if cur != &rec && cur.beats(&rec) {
-                report.superseded += 1;
-                done.push((rec.kind, rec.id.clone(), rec.modified_ms));
-                continue;
-            }
+        if let Some(cur) = &current
+            && cur != &rec
+            && cur.beats(&rec)
+        {
+            report.superseded += 1;
+            done.push((rec.kind, rec.id.clone(), rec.modified_ms));
+            continue;
         }
         batch.push(rec.seal(keys)?);
         done.push((rec.kind, rec.id.clone(), rec.modified_ms));

@@ -410,10 +410,10 @@ mod secret_tool {
 impl PlatformStore {
     fn file_key(&self) -> Result<chacha20poly1305::Key, SecretError> {
         let path = self.dir.join(".key");
-        if let Some(k) = read_opt(&path)? {
-            if k.len() == 32 {
-                return Ok(*chacha20poly1305::Key::from_slice(&k));
-            }
+        if let Some(k) = read_opt(&path)?
+            && k.len() == 32
+        {
+            return Ok(*chacha20poly1305::Key::from_slice(&k));
         }
         self.ensure_dir()?;
         let mut k = [0u8; 32];
@@ -462,10 +462,10 @@ impl PlatformStore {
 impl SecretStore for PlatformStore {
     fn get(&self, name: &str) -> Result<Option<Secret>, SecretError> {
         check_name(name)?;
-        if self.use_secret_tool {
-            if let Some(s) = secret_tool::lookup(name) {
-                return Ok(Some(s));
-            }
+        if self.use_secret_tool
+            && let Some(s) = secret_tool::lookup(name)
+        {
+            return Ok(Some(s));
         }
         self.file_get(name)
     }

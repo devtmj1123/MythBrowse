@@ -1,0 +1,55 @@
+diff --git a/dom/subtlecrypto/rsa_oaep_operation.rs b/dom/subtlecrypto/rsa_oaep_operation.rs
+index 40b4e3c..a2d0901 100644
+--- a/dom/subtlecrypto/rsa_oaep_operation.rs
++++ b/dom/subtlecrypto/rsa_oaep_operation.rs
+@@ -132,8 +132,9 @@ pub(crate) fn decrypt(
+             ))));
+         },
+     };
++    // MythBrowse: decrypt with RSA blinding (RUSTSEC-2023-0071 hardening, patch 0008).
+     let plaintext = private_key
+-        .decrypt(padding, ciphertext)
++        .decrypt_blinded(&mut OsRng, padding, ciphertext)
+         .map_err(|_| Error::Operation(Some("RSA-OAEP failed to decrypt ciphertext".to_string())))?;
+ 
+     // Step 6. Return plaintext.
+diff --git a/dom/subtlecrypto/rsassa_pkcs1_v1_5_operation.rs b/dom/subtlecrypto/rsassa_pkcs1_v1_5_operation.rs
+index e0d32c8..f23fbb2 100644
+--- a/dom/subtlecrypto/rsassa_pkcs1_v1_5_operation.rs
++++ b/dom/subtlecrypto/rsassa_pkcs1_v1_5_operation.rs
+@@ -3,8 +3,10 @@
+  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ 
+ use js::context::JSContext;
++// MythBrowse: sign with RSA blinding (RUSTSEC-2023-0071 hardening, patch 0008).
++use pkcs8::rand_core::OsRng;
+ use rsa::pkcs1v15::{Signature, SigningKey, VerifyingKey};
+-use rsa::signature::{SignatureEncoding, Signer, Verifier};
++use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
+ use sha1::Sha1;
+ use sha2::{Sha256, Sha384, Sha512};
+ 
+@@ -52,19 +54,19 @@ pub(crate) fn sign(key: &CryptoKey, message: &[u8]) -> Result<Vec<u8>, Error> {
+     let signature = match algorithm.hash.name() {
+         CryptoAlgorithm::Sha1 => {
+             let signing_key = SigningKey::<Sha1>::new(private_key.clone());
+-            signing_key.try_sign(message)
++            signing_key.try_sign_with_rng(&mut OsRng, message)
+         },
+         CryptoAlgorithm::Sha256 => {
+             let signing_key = SigningKey::<Sha256>::new(private_key.clone());
+-            signing_key.try_sign(message)
++            signing_key.try_sign_with_rng(&mut OsRng, message)
+         },
+         CryptoAlgorithm::Sha384 => {
+             let signing_key = SigningKey::<Sha384>::new(private_key.clone());
+-            signing_key.try_sign(message)
++            signing_key.try_sign_with_rng(&mut OsRng, message)
+         },
+         CryptoAlgorithm::Sha512 => {
+             let signing_key = SigningKey::<Sha512>::new(private_key.clone());
+-            signing_key.try_sign(message)
++            signing_key.try_sign_with_rng(&mut OsRng, message)
+         },
+         _ => {
+             return Err(Error::Operation(Some(format!(
