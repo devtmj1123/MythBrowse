@@ -17,7 +17,6 @@ mod ecdsa_operation;
 mod ed25519_operation;
 mod hkdf_operation;
 mod hmac_operation;
-mod ml_dsa_operation;
 mod ml_kem_operation;
 mod pbkdf2_operation;
 mod rsa_common;
@@ -123,6 +122,8 @@ enum CryptoAlgorithm {
     MlKem768,
     #[strum(serialize = "ML-KEM-1024")]
     MlKem1024,
+    // MythBrowse patch 0007: the ML-DSA names stay recognized but no operation supports
+    // them (NotSupportedError); see the registration list below.
     #[strum(serialize = "ML-DSA-44")]
     MlDsa44,
     #[strum(serialize = "ML-DSA-65")]
@@ -3013,31 +3014,6 @@ impl<'a> TryFromWithCxAndName<HandleObject<'a>> for SubtlePbkdf2Params {
     }
 }
 
-/// <https://wicg.github.io/webcrypto-modern-algos/#dfn-ContextParams>
-#[derive(Clone, MallocSizeOf)]
-struct SubtleContextParams {
-    /// <https://w3c.github.io/webcrypto/#dom-algorithm-name>
-    name: CryptoAlgorithm,
-
-    /// <https://wicg.github.io/webcrypto-modern-algos/#dfn-ContextParams-context>
-    context: Option<Vec<u8>>,
-}
-
-impl<'a> TryFromWithCxAndName<HandleObject<'a>> for SubtleContextParams {
-    type Error = Error;
-
-    fn try_from_with_cx_and_name(
-        object: HandleObject<'a>,
-        cx: &mut js::context::JSContext,
-        algorithm_name: CryptoAlgorithm,
-    ) -> Result<Self, Self::Error> {
-        Ok(SubtleContextParams {
-            name: algorithm_name,
-            context: get_optional_buffer_source(cx, object, c"context")?,
-        })
-    }
-}
-
 /// <https://wicg.github.io/webcrypto-modern-algos/#dfn-AeadParams>
 #[derive(Clone, MallocSizeOf)]
 struct SubtleAeadParams {
@@ -3877,6 +3853,8 @@ fn normalize_algorithm<Op: Operation>(
 // PBKDF2:            <https://w3c.github.io/webcrypto/#pbkdf2-registration>
 // ML-KEM:            <https://wicg.github.io/webcrypto-modern-algos/#ml-kem-registration>
 // ML-DSA:            <https://wicg.github.io/webcrypto-modern-algos/#ml-dsa-registration>
+//                    MythBrowse patch 0007: not registered for any operation (ml-dsa 0.0.4
+//                    advisories, see third_party/README.md), so it normalizes to NotSupportedError.
 // AES-OCB:           <https://wicg.github.io/webcrypto-modern-algos/#aes-ocb-registration>
 // ChaCha20-Poly1305: <https://wicg.github.io/webcrypto-modern-algos/#chacha20-poly1305-registration>
 // SHA-3:             <https://wicg.github.io/webcrypto-modern-algos/#sha3-registration>
@@ -4086,7 +4064,6 @@ enum SignAlgorithm {
     Ecdsa(SubtleEcdsaParams),
     Ed25519(SubtleAlgorithm),
     Hmac(SubtleAlgorithm),
-    MlDsa(SubtleContextParams),
 }
 
 impl NormalizedAlgorithm for SignAlgorithm {
@@ -4111,9 +4088,6 @@ impl NormalizedAlgorithm for SignAlgorithm {
             CryptoAlgorithm::Hmac => Ok(SignAlgorithm::Hmac(
                 object.try_into_with_cx_and_name(cx, algorithm_name)?,
             )),
-            CryptoAlgorithm::MlDsa44 | CryptoAlgorithm::MlDsa65 | CryptoAlgorithm::MlDsa87 => Ok(
-                SignAlgorithm::MlDsa(object.try_into_with_cx_and_name(cx, algorithm_name)?),
-            ),
             _ => Err(Error::NotSupported(Some(format!(
                 "{} does not support \"sign\" operation",
                 algorithm_name.as_str()
@@ -4128,7 +4102,6 @@ impl NormalizedAlgorithm for SignAlgorithm {
             SignAlgorithm::Ecdsa(algorithm) => algorithm.name,
             SignAlgorithm::Ed25519(algorithm) => algorithm.name,
             SignAlgorithm::Hmac(algorithm) => algorithm.name,
-            SignAlgorithm::MlDsa(algorithm) => algorithm.name,
         }
     }
 }
@@ -4143,7 +4116,6 @@ impl SignAlgorithm {
             SignAlgorithm::Ecdsa(algorithm) => ecdsa_operation::sign(algorithm, key, message),
             SignAlgorithm::Ed25519(_algorithm) => ed25519_operation::sign(key, message),
             SignAlgorithm::Hmac(_algorithm) => hmac_operation::sign(key, message),
-            SignAlgorithm::MlDsa(algorithm) => ml_dsa_operation::sign(algorithm, key, message),
         }
     }
 }
@@ -4163,7 +4135,6 @@ enum VerifyAlgorithm {
     Ecdsa(SubtleEcdsaParams),
     Ed25519(SubtleAlgorithm),
     Hmac(SubtleAlgorithm),
-    MlDsa(SubtleContextParams),
 }
 
 impl NormalizedAlgorithm for VerifyAlgorithm {
@@ -4188,9 +4159,6 @@ impl NormalizedAlgorithm for VerifyAlgorithm {
             CryptoAlgorithm::Hmac => Ok(VerifyAlgorithm::Hmac(
                 object.try_into_with_cx_and_name(cx, algorithm_name)?,
             )),
-            CryptoAlgorithm::MlDsa44 | CryptoAlgorithm::MlDsa65 | CryptoAlgorithm::MlDsa87 => Ok(
-                VerifyAlgorithm::MlDsa(object.try_into_with_cx_and_name(cx, algorithm_name)?),
-            ),
             _ => Err(Error::NotSupported(Some(format!(
                 "{} does not support \"verify\" operation",
                 algorithm_name.as_str()
@@ -4205,7 +4173,6 @@ impl NormalizedAlgorithm for VerifyAlgorithm {
             VerifyAlgorithm::Ecdsa(algorithm) => algorithm.name,
             VerifyAlgorithm::Ed25519(algorithm) => algorithm.name,
             VerifyAlgorithm::Hmac(algorithm) => algorithm.name,
-            VerifyAlgorithm::MlDsa(algorithm) => algorithm.name,
         }
     }
 }
@@ -4226,9 +4193,6 @@ impl VerifyAlgorithm {
                 ed25519_operation::verify(key, message, signature)
             },
             VerifyAlgorithm::Hmac(_algorithm) => hmac_operation::verify(key, message, signature),
-            VerifyAlgorithm::MlDsa(algorithm) => {
-                ml_dsa_operation::verify(algorithm, key, message, signature)
-            },
         }
     }
 }
@@ -4496,7 +4460,6 @@ enum GenerateKeyAlgorithm {
     AesKw(SubtleAesKeyGenParams),
     Hmac(SubtleHmacKeyGenParams),
     MlKem(SubtleAlgorithm),
-    MlDsa(SubtleAlgorithm),
     AesOcb(SubtleAesKeyGenParams),
     ChaCha20Poly1305(SubtleAlgorithm),
 }
@@ -4549,9 +4512,6 @@ impl NormalizedAlgorithm for GenerateKeyAlgorithm {
                     object.try_into_with_cx_and_name(cx, algorithm_name)?,
                 ))
             },
-            CryptoAlgorithm::MlDsa44 | CryptoAlgorithm::MlDsa65 | CryptoAlgorithm::MlDsa87 => Ok(
-                GenerateKeyAlgorithm::MlDsa(object.try_into_with_cx_and_name(cx, algorithm_name)?),
-            ),
             CryptoAlgorithm::AesOcb => Ok(GenerateKeyAlgorithm::AesOcb(
                 object.try_into_with_cx_and_name(cx, algorithm_name)?,
             )),
@@ -4580,7 +4540,6 @@ impl NormalizedAlgorithm for GenerateKeyAlgorithm {
             GenerateKeyAlgorithm::AesKw(algorithm) => algorithm.name,
             GenerateKeyAlgorithm::Hmac(algorithm) => algorithm.name,
             GenerateKeyAlgorithm::MlKem(algorithm) => algorithm.name,
-            GenerateKeyAlgorithm::MlDsa(algorithm) => algorithm.name,
             GenerateKeyAlgorithm::AesOcb(algorithm) => algorithm.name,
             GenerateKeyAlgorithm::ChaCha20Poly1305(algorithm) => algorithm.name,
         }
@@ -4654,10 +4613,6 @@ impl GenerateKeyAlgorithm {
                 ml_kem_operation::generate_key(cx, global, algorithm, extractable, usages)
                     .map(CryptoKeyOrCryptoKeyPair::CryptoKeyPair)
             },
-            GenerateKeyAlgorithm::MlDsa(algorithm) => {
-                ml_dsa_operation::generate_key(cx, global, algorithm, extractable, usages)
-                    .map(CryptoKeyOrCryptoKeyPair::CryptoKeyPair)
-            },
             GenerateKeyAlgorithm::AesOcb(algorithm) => {
                 aes_ocb_operation::generate_key(cx, global, algorithm, extractable, usages)
                     .map(CryptoKeyOrCryptoKeyPair::CryptoKey)
@@ -4695,7 +4650,6 @@ enum ImportKeyAlgorithm {
     Hkdf(SubtleAlgorithm),
     Pbkdf2(SubtleAlgorithm),
     MlKem(SubtleAlgorithm),
-    MlDsa(SubtleAlgorithm),
     AesOcb(SubtleAlgorithm),
     ChaCha20Poly1305(SubtleAlgorithm),
     Argon2(SubtleAlgorithm),
@@ -4755,9 +4709,6 @@ impl NormalizedAlgorithm for ImportKeyAlgorithm {
                     object.try_into_with_cx_and_name(cx, algorithm_name)?,
                 ))
             },
-            CryptoAlgorithm::MlDsa44 | CryptoAlgorithm::MlDsa65 | CryptoAlgorithm::MlDsa87 => Ok(
-                ImportKeyAlgorithm::MlDsa(object.try_into_with_cx_and_name(cx, algorithm_name)?),
-            ),
             CryptoAlgorithm::AesOcb => Ok(ImportKeyAlgorithm::AesOcb(
                 object.try_into_with_cx_and_name(cx, algorithm_name)?,
             )),
@@ -4791,7 +4742,6 @@ impl NormalizedAlgorithm for ImportKeyAlgorithm {
             ImportKeyAlgorithm::Hkdf(algorithm) => algorithm.name,
             ImportKeyAlgorithm::Pbkdf2(algorithm) => algorithm.name,
             ImportKeyAlgorithm::MlKem(algorithm) => algorithm.name,
-            ImportKeyAlgorithm::MlDsa(algorithm) => algorithm.name,
             ImportKeyAlgorithm::AesOcb(algorithm) => algorithm.name,
             ImportKeyAlgorithm::ChaCha20Poly1305(algorithm) => algorithm.name,
             ImportKeyAlgorithm::Argon2(algorithm) => algorithm.name,
@@ -4899,15 +4849,6 @@ impl ImportKeyAlgorithm {
                 extractable,
                 usages,
             ),
-            ImportKeyAlgorithm::MlDsa(algorithm) => ml_dsa_operation::import_key(
-                cx,
-                global,
-                algorithm,
-                format,
-                key_data,
-                extractable,
-                usages,
-            ),
             ImportKeyAlgorithm::AesOcb(_algorithm) => {
                 aes_ocb_operation::import_key(cx, global, format, key_data, extractable, usages)
             },
@@ -4957,7 +4898,6 @@ enum ExportKeyAlgorithm {
     AesKw(SubtleAlgorithm),
     Hmac(SubtleAlgorithm),
     MlKem(SubtleAlgorithm),
-    MlDsa(SubtleAlgorithm),
     AesOcb(SubtleAlgorithm),
     ChaCha20Poly1305(SubtleAlgorithm),
 }
@@ -5010,9 +4950,6 @@ impl NormalizedAlgorithm for ExportKeyAlgorithm {
                     object.try_into_with_cx_and_name(cx, algorithm_name)?,
                 ))
             },
-            CryptoAlgorithm::MlDsa44 | CryptoAlgorithm::MlDsa65 | CryptoAlgorithm::MlDsa87 => Ok(
-                ExportKeyAlgorithm::MlDsa(object.try_into_with_cx_and_name(cx, algorithm_name)?),
-            ),
             CryptoAlgorithm::AesOcb => Ok(ExportKeyAlgorithm::AesOcb(
                 object.try_into_with_cx_and_name(cx, algorithm_name)?,
             )),
@@ -5041,7 +4978,6 @@ impl NormalizedAlgorithm for ExportKeyAlgorithm {
             ExportKeyAlgorithm::AesKw(algorithm) => algorithm.name,
             ExportKeyAlgorithm::Hmac(algorithm) => algorithm.name,
             ExportKeyAlgorithm::MlKem(algorithm) => algorithm.name,
-            ExportKeyAlgorithm::MlDsa(algorithm) => algorithm.name,
             ExportKeyAlgorithm::AesOcb(algorithm) => algorithm.name,
             ExportKeyAlgorithm::ChaCha20Poly1305(algorithm) => algorithm.name,
         }
@@ -5066,7 +5002,6 @@ impl ExportKeyAlgorithm {
             ExportKeyAlgorithm::AesKw(_algorithm) => aes_kw_operation::export_key(format, key),
             ExportKeyAlgorithm::Hmac(_algorithm) => hmac_operation::export_key(format, key),
             ExportKeyAlgorithm::MlKem(_algorithm) => ml_kem_operation::export_key(format, key),
-            ExportKeyAlgorithm::MlDsa(_algorithm) => ml_dsa_operation::export_key(format, key),
             ExportKeyAlgorithm::AesOcb(_algorithm) => aes_ocb_operation::export_key(format, key),
             ExportKeyAlgorithm::ChaCha20Poly1305(_algorithm) => {
                 chacha20_poly1305_operation::export_key(format, key)

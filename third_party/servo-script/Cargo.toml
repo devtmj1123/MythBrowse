@@ -289,9 +289,6 @@ version = "0.10.0"
 [dependencies.mime_guess]
 version = "2.0.5"
 
-[dependencies.ml-dsa]
-version = "0.0.4"
-
 [dependencies.ml-kem]
 version = "0.2"
 features = ["deterministic"]

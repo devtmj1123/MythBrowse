@@ -13,10 +13,10 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 
 | Licence | Crates |
 |---|---|
-| MIT OR Apache-2.0 | 357 |
+| MIT OR Apache-2.0 | 356 |
 | MIT | 151 |
 | MPL-2.0 | 80 |
-| Apache-2.0 OR MIT | 70 |
+| Apache-2.0 OR MIT | 69 |
 | MIT/Apache-2.0 | 55 |
 | Unicode-3.0 | 44 |
 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | 17 |
@@ -59,7 +59,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | Apache-2.0 WITH LLVM-exception | 1 |
 | (MIT OR Apache-2.0) AND Unicode-3.0 | 1 |
 
-881 crates.
+879 crates.
 
 ## Crates
 
@@ -89,7 +89,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | anstyle-parse | 0.2.7 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-cli/anstyle.git |
 | anstyle-query | 1.1.5 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-cli/anstyle.git |
 | anstyle-wincon | 3.0.11 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-cli/anstyle.git |
-| anyhow | 1.0.102 | MIT OR Apache-2.0 | crates.io | https://github.com/dtolnay/anyhow |
+| anyhow | 1.0.104 | MIT OR Apache-2.0 | crates.io | https://github.com/dtolnay/anyhow |
 | app_units | 0.7.8 | MPL-2.0 | crates.io | https://github.com/servo/app_units |
 | arbitrary | 1.4.2 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-fuzz/arbitrary/ |
 | arboard | 3.6.1 | MIT OR Apache-2.0 | crates.io | https://github.com/1Password/arboard |
@@ -295,7 +295,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | gpu-allocator | 0.27.0 | MIT OR Apache-2.0 | crates.io | https://github.com/Traverse-Research/gpu-allocator |
 | gpu-descriptor | 0.3.2 | MIT OR Apache-2.0 | crates.io | https://github.com/zakarumych/gpu-descriptor |
 | gpu-descriptor-types | 0.2.0 | MIT OR Apache-2.0 | crates.io | https://github.com/zakarumych/gpu-descriptor |
-| grid | 1.0.0 | MIT | crates.io | https://github.com/becheran/grid |
+| grid | 1.0.1 | MIT | crates.io | https://github.com/becheran/grid |
 | group | 0.13.0 | MIT/Apache-2.0 | crates.io | https://github.com/zkcrypto/group |
 | h2 | 0.3.27 | MIT | crates.io | https://github.com/hyperium/h2 |
 | h2 | 0.4.17 | MIT | crates.io | https://github.com/hyperium/h2 |
@@ -323,7 +323,6 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | httparse | 1.10.1 | MIT OR Apache-2.0 | crates.io | https://github.com/seanmonstar/httparse |
 | httpdate | 1.0.3 | MIT OR Apache-2.0 | crates.io | https://github.com/pyfisch/httpdate |
 | hybrid-array | 0.2.3 | MIT OR Apache-2.0 | crates.io | https://github.com/RustCrypto/hybrid-array |
-| hybrid-array | 0.3.1 | MIT OR Apache-2.0 | crates.io | https://github.com/RustCrypto/hybrid-array |
 | hyper | 0.14.32 | MIT | crates.io | https://github.com/hyperium/hyper |
 | hyper | 1.11.0 | MIT | crates.io | https://github.com/hyperium/hyper |
 | hyper-rustls | 0.27.7 | Apache-2.0 OR ISC OR MIT | crates.io | https://github.com/rustls/hyper-rustls |
@@ -430,7 +429,6 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | minimal-lexical | 0.2.1 | MIT/Apache-2.0 | crates.io | https://github.com/Alexhuszagh/minimal-lexical |
 | miniz_oxide | 0.8.9 | MIT OR Zlib OR Apache-2.0 | crates.io | https://github.com/Frommi/miniz_oxide/tree/master/miniz_oxide |
 | mio | 1.2.0 | MIT | crates.io | https://github.com/tokio-rs/mio |
-| ml-dsa | 0.0.4 | Apache-2.0 OR MIT | crates.io | https://github.com/RustCrypto/signatures |
 | ml-kem | 0.2.3 | Apache-2.0 OR MIT | crates.io | https://github.com/RustCrypto/KEMs |
 | mozangle | 0.5.5 | BSD-3-Clause | crates.io | https://github.com/servo/mozangle |
 | mozjs | 0.15.20 | MPL-2.0 | crates.io | https://github.com/servo/mozjs/ |
@@ -448,7 +446,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | num-bigint | 0.4.6 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-num/num-bigint |
 | num-bigint-dig | 0.8.6 | MIT/Apache-2.0 | crates.io | https://github.com/dignifiedquire/num-bigint |
 | num-complex | 0.2.4 | MIT/Apache-2.0 | crates.io | https://github.com/rust-num/num-complex |
-| num-conv | 0.1.0 | MIT OR Apache-2.0 | crates.io | https://github.com/jhpratt/num-conv |
+| num-conv | 0.2.2 | MIT OR Apache-2.0 | crates.io | https://github.com/jhpratt/num-conv |
 | num-derive | 0.4.2 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-num/num-derive |
 | num-integer | 0.1.46 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-num/num-integer |
 | num-iter | 0.1.45 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-num/num-iter |
@@ -548,7 +546,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | quote | 1.0.45 | MIT OR Apache-2.0 | crates.io | https://github.com/dtolnay/quote |
 | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | crates.io | https://github.com/r-efi/r-efi |
 | rand | 0.7.3 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-random/rand |
-| rand | 0.8.5 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-random/rand |
+| rand | 0.8.8 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-random/rand |
 | rand | 0.9.5 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-random/rand |
 | rand_chacha | 0.2.2 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-random/rand |
 | rand_chacha | 0.3.1 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-random/rand |
@@ -585,7 +583,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 | crates.io | https://github.com/djc/rustc-version-rs |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io | https://github.com/bytecodealliance/rustix |
 | rustix | 1.1.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | crates.io | https://github.com/bytecodealliance/rustix |
-| rustls | 0.23.45 | Apache-2.0 OR ISC OR MIT | crates.io | https://github.com/rustls/rustls |
+| rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT | crates.io | https://github.com/rustls/rustls |
 | rustls-native-certs | 0.8.3 | Apache-2.0 OR ISC OR MIT | crates.io | https://github.com/rustls/rustls-native-certs |
 | rustls-pki-types | 1.14.0 | MIT OR Apache-2.0 | crates.io | https://github.com/rustls/pki-types |
 | rustls-platform-verifier | 0.6.2 | MIT OR Apache-2.0 | crates.io | https://github.com/rustls/rustls-platform-verifier |
@@ -684,7 +682,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | skrifa | 0.37.0 | MIT OR Apache-2.0 | crates.io | https://github.com/googlefonts/fontations |
 | slab | 0.4.12 | MIT | crates.io | https://github.com/tokio-rs/slab |
 | slotmap | 1.1.1 | Zlib | crates.io | https://github.com/orlp/slotmap |
-| smallbitvec | 2.6.0 | MIT OR Apache-2.0 | crates.io | https://github.com/servo/smallbitvec |
+| smallbitvec | 2.6.1 | MIT OR Apache-2.0 | crates.io | https://github.com/servo/smallbitvec |
 | smallvec | 1.15.1 | MIT OR Apache-2.0 | crates.io | https://github.com/servo/rust-smallvec |
 | smithay-client-toolkit | 0.19.2 | MIT | crates.io | https://github.com/smithay/client-toolkit |
 | smol_str | 0.2.2 | MIT OR Apache-2.0 | crates.io | https://github.com/rust-analyzer/smol_str |
@@ -721,7 +719,7 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | sys-locale | 0.3.2 | MIT OR Apache-2.0 | crates.io | https://github.com/1Password/sys-locale |
 | system-deps | 6.2.2 | MIT OR Apache-2.0 | crates.io | https://github.com/gdesmott/system-deps |
 | taffy | 0.10.0 | MIT | crates.io | https://github.com/DioxusLabs/taffy |
-| tar | 0.4.45 | MIT OR Apache-2.0 | crates.io | https://github.com/alexcrichton/tar-rs |
+| tar | 0.4.46 | MIT OR Apache-2.0 | crates.io | https://github.com/composefs/tar-rs |
 | target-lexicon | 0.12.16 | Apache-2.0 WITH LLVM-exception | crates.io | https://github.com/bytecodealliance/target-lexicon |
 | tempfile | 3.23.0 | MIT OR Apache-2.0 | crates.io | https://github.com/Stebalien/tempfile |
 | tendril | 0.5.0 | MIT OR Apache-2.0 | crates.io | https://github.com/servo/html5ever |
@@ -734,9 +732,9 @@ Also used outside Cargo: ANGLE (BSD-3-Clause, via `mozangle`), SQLite (public do
 | tiff | 0.9.1 | MIT | crates.io | https://github.com/image-rs/image-tiff |
 | tikv-jemalloc-sys | 0.6.1+5.3.0-1-ge13ca993e8ccb9ba9847cc330696e02839f328f7 | MIT/Apache-2.0 | crates.io | https://github.com/tikv/jemallocator |
 | tikv-jemallocator | 0.6.1 | MIT/Apache-2.0 | crates.io | https://github.com/tikv/jemallocator |
-| time | 0.3.45 | MIT OR Apache-2.0 | crates.io | https://github.com/time-rs/time |
-| time-core | 0.1.7 | MIT OR Apache-2.0 | crates.io | https://github.com/time-rs/time |
-| time-macros | 0.2.25 | MIT OR Apache-2.0 | crates.io | https://github.com/time-rs/time |
+| time | 0.3.55 | MIT OR Apache-2.0 | crates.io | https://github.com/time-rs/time |
+| time-core | 0.1.9 | MIT OR Apache-2.0 | crates.io | https://github.com/time-rs/time |
+| time-macros | 0.2.32 | MIT OR Apache-2.0 | crates.io | https://github.com/time-rs/time |
 | tiny-skia | 0.11.4 | BSD-3-Clause | crates.io | https://github.com/RazrFalcon/tiny-skia |
 | tiny-skia-path | 0.11.4 | BSD-3-Clause | crates.io | https://github.com/RazrFalcon/tiny-skia/tree/master/path |
 | tinystr | 0.7.6 | Unicode-3.0 | crates.io | https://github.com/unicode-org/icu4x |

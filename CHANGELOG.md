@@ -32,6 +32,17 @@ First public release of the MythBrowse source under the Mozilla Public License 2
 - Cargo feature `official` (off by default) on the shell and the light crates selects the
   official identity; it is for JustMyth's official builds only.
 
+### Security
+
+- WebCrypto no longer offers the draft ML-DSA-44/65/87 algorithms (`crypto.subtle` calls with
+  those names reject with `NotSupportedError`). Servo 0.1.4 implements them with `ml-dsa` 0.0.4,
+  which has open advisories (CVE-2026-24850, CVE-2026-22705 / RUSTSEC-2025-0144,
+  GHSA-h37v-hp6w-2pp8) and no fixed version on the Servo 0.1 line; see `third_party/README.md`
+  (servo-script 0007). The `ml-dsa` crate is no longer built.
+- Dependency updates: rustls 0.23.46 (RUSTSEC-2026-0346 to -0349), time 0.3.55
+  (RUSTSEC-2026-0009), rand 0.8.8 (RUSTSEC-2026-0097), anyhow 1.0.104 (RUSTSEC-2026-0190), and
+  grid 1.0.1, smallbitvec 2.6.1, tar 0.4.46.
+
 ### Changed compared with the preview builds
 
 - The Myth agent (browser control), its prompts and its agent-specific safeguards are not part
