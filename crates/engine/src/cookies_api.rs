@@ -466,8 +466,7 @@ mod tests {
 
     #[test]
     fn persist_cookies_default_on_explicit_off_stays_off() {
-        // Missing key (new profile, or never touched before 0.4.2): on.
-        assert!(PERSIST_COOKIES_DEFAULT);
+        // Missing key (new profile, or never touched before 0.4.2): on (the default).
         assert!(persist_cookies_from_pref(None));
         // Explicit choices are kept.
         assert!(persist_cookies_from_pref(Some("1")));
