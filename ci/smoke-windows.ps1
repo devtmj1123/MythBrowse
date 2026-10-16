@@ -17,6 +17,10 @@
 #  4b. WebCrypto (ci/webcrypto-check.html on a loopback server): ML-DSA-44/65/87 reject with
 #     NotSupportedError, SHA-256 / HMAC / AES-GCM / ECDSA / Ed25519 / RSA-PSS / RSASSA /
 #     RSA-OAEP / PBKDF2 / HKDF still work (known-answer vectors where standard);
+#  4c. Stay signed in (on by default, ci/cookie_check.py on a loopback server): a cookie set
+#     before a clean exit is sent again after a restart, the jar on disk is sealed (no plain
+#     cookie_jar.json, the value not readable in it); with persist_cookies "0" in ui.json the
+#     next start is signed out and engine-data is deleted;
 #  5. Myth against a mock OpenAI-compatible server: streamed chat from the home page and a
 #     question typed on a web page (the open build answers, never acts; no tools are sent);
 #     DPAPI key store self-test; no API key in any log.
@@ -124,12 +128,13 @@ else {
 }
 Show-Logs "run0"
 
-function Start-Browser([string] $tag, [string[]] $argv) {
+function Start-Browser([string] $tag, [string[]] $argv, [string] $profileTag = "") {
   $p = @{ FilePath = $exe; PassThru = $true; WorkingDirectory = $AppDir
           RedirectStandardOutput = (Join-Path $OutDir "$tag-stdout.log")
           RedirectStandardError = (Join-Path $OutDir "$tag-stderr.log") }
   if ($argv) { $p.ArgumentList = $argv }
-  $env:MYTHBROWSE_PROFILE_DIR = Join-Path $OutDir "profile-$tag"
+  if (-not $profileTag) { $profileTag = $tag }
+  $env:MYTHBROWSE_PROFILE_DIR = Join-Path $OutDir "profile-$profileTag"
   $proc = Start-Process @p
   $null = $proc.Handle   # cache the handle so ExitCode is available later
   for ($i = 0; $i -lt 60; $i++) {
@@ -310,6 +315,89 @@ try { $j = ($wcr.Trim() -split "`n")[-1] | ConvertFrom-Json; $wcOk = ($j.ok -eq 
   foreach ($r in $j.results) { Write-Host ("[smoke] run4b " + ($(if ($r.ok) { "PASS " } else { "FAIL " })) + $r.name + " " + $r.detail) } } catch { }
 if ($t -notmatch "webcrypto PASS" -or -not $wcOk) { Write-Host "[smoke] run4b: WebCrypto check FAILED"; $status = 1 }
 else { Write-Host "[smoke] run4b: WebCrypto check passed ($($j.passed)/$($j.total))" }
+
+# Run 4c: Stay signed in (persist_cookies, on by default). Three starts on one profile
+# (profile-run4c, no ui.json at first): set a cookie and close cleanly (the jar is written at a
+# clean exit), start again and expect the cookie back, then turn the setting off in ui.json
+# and expect a signed-out start with engine-data deleted.
+$ckLog = Join-Path $OutDir "cookie-check.log"
+$ck = Start-Process -FilePath "python" -ArgumentList @("ci/cookie_check.py", "--port", "18082", "--log", $ckLog) `
+  -PassThru -RedirectStandardOutput (Join-Path $OutDir "cookie-stdout.log") -RedirectStandardError (Join-Path $OutDir "cookie-stderr.log")
+$ckUp = $false
+for ($i = 0; $i -lt 60 -and -not $ckUp; $i++) {
+  try { $tc = New-Object System.Net.Sockets.TcpClient; $tc.Connect("127.0.0.1", 18082); $tc.Close(); $ckUp = $true }
+  catch { Start-Sleep -Milliseconds 500 }
+}
+if (-not $ckUp) { Write-Host "[smoke] run4c: cookie page server did not start"; $status = 1 }
+$prof4c = Join-Path $OutDir "profile-run4c"
+$ckUrl = "http://127.0.0.1:18082/"
+function Wait-CookieTitle($proc) {
+  $t = ""
+  for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep -Seconds 1
+    $proc.Refresh()
+    if ($proc.HasExited) { break }
+    $t = $proc.MainWindowTitle
+    if ($t -match "cookie (SET|KEPT) ") { break }
+  }
+  return $t
+}
+function Close-Clean($proc, [string] $tag) {
+  $proc.Refresh()
+  if ($proc.HasExited) { Write-Host "[smoke] $tag EXITED EARLY with code $($proc.ExitCode)"; $script:status = 1; Show-Logs $tag; return }
+  $null = $proc.CloseMainWindow()
+  if ($proc.WaitForExit(30000)) {
+    Write-Host "[smoke] $tag closed cleanly (WM_CLOSE), code $($proc.ExitCode)"
+    if ($proc.ExitCode -ne 0) { $script:status = 1 }
+  } else {
+    Write-Host "[smoke] $tag did not exit on WM_CLOSE"; $script:status = 1
+    Stop-Process -Id $proc.Id -Force
+  }
+  $err = Get-Content (Join-Path $OutDir "$tag-stderr.log") -Raw -ErrorAction SilentlyContinue
+  if ($err -match "panicked") { Write-Host "[smoke] $tag : PANIC in stderr"; $script:status = 1 }
+  Start-Sleep -Seconds 2
+}
+$env:MYTHBROWSE_THEME_HOUR = "10"
+# 1st start: no ui.json, so Stay signed in is on by default.
+$p4c = Start-Browser "run4c" @($ckUrl)
+$t1 = Wait-CookieTitle $p4c
+Write-Host "[smoke] run4c start 1 title: '$t1'"
+Shot "14-cookie-set"
+$v1 = if ($t1 -match "cookie (SET|KEPT) ([0-9a-f]+)") { $Matches[2] } else { "" }
+Close-Clean $p4c "run4c"
+$log4c = Get-Content (Join-Path $prof4c "logs\mythbrowse.log") -Raw -ErrorAction SilentlyContinue
+if ($log4c -notmatch "cookies: kept after restart") { Write-Host "[smoke] run4c: the default start did not keep cookies (log)"; $status = 1 }
+if ($t1 -notmatch "cookie SET") { Write-Host "[smoke] run4c: expected a fresh profile to get a new cookie"; $status = 1 }
+$sealed = Join-Path $prof4c "engine-data\cookie_jar.sealed"
+if (-not (Test-Path $sealed)) { Write-Host "[smoke] run4c: no engine-data\cookie_jar.sealed after a clean exit"; $status = 1 }
+elseif ($v1 -and ([System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($sealed)) -match $v1)) {
+  Write-Host "[smoke] run4c: the cookie value is readable in the sealed jar"; $status = 1 }
+else { Write-Host "[smoke] run4c: sealed jar written ($((Get-Item $sealed).Length) bytes), value not readable in it" }
+if (Test-Path (Join-Path $prof4c "engine-data\cookie_jar.json")) { Write-Host "[smoke] run4c: plain cookie_jar.json written"; $status = 1 }
+if (Test-Path (Join-Path $prof4c "engine-data\auth_cache.json")) { Write-Host "[smoke] run4c: auth_cache.json written"; $status = 1 }
+# 2nd start, same profile: still signed in.
+$p4c2 = Start-Browser "run4c2" @($ckUrl) "run4c"
+$t2 = Wait-CookieTitle $p4c2
+Write-Host "[smoke] run4c start 2 title: '$t2'"
+Shot "15-cookie-kept"
+Close-Clean $p4c2 "run4c2"
+if (-not $v1 -or $t2 -notmatch "cookie KEPT $v1") { Write-Host "[smoke] run4c: the cookie did not survive the restart"; $status = 1 }
+else { Write-Host "[smoke] run4c: cookie kept after restart ($t2)" }
+# 3rd start with Stay signed in explicitly off: signed out, engine-data deleted.
+$uiPath = Join-Path $prof4c "ui.json"
+$ui = $null
+if (Test-Path $uiPath) { try { $ui = Get-Content $uiPath -Raw | ConvertFrom-Json } catch { $ui = $null } }
+if (-not $ui) { $ui = New-Object PSObject }
+$ui | Add-Member -NotePropertyName "persist_cookies" -NotePropertyValue "0" -Force
+[System.IO.File]::WriteAllText($uiPath, ($ui | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+$p4c3 = Start-Browser "run4c3" @($ckUrl) "run4c"
+$t3 = Wait-CookieTitle $p4c3
+Write-Host "[smoke] run4c start 3 (persist_cookies 0) title: '$t3'"
+Stop-Browser $p4c3 "run4c3"
+if ($t3 -notmatch "cookie SET") { Write-Host "[smoke] run4c: with Stay signed in off the start was not signed out"; $status = 1 }
+if (Test-Path (Join-Path $prof4c "engine-data")) { Write-Host "[smoke] run4c: engine-data not deleted with Stay signed in off"; $status = 1 }
+Stop-Process -Id $ck.Id -Force -ErrorAction SilentlyContinue
+Write-Host "----- cookie-check.log"; Get-Content $ckLog -ErrorAction SilentlyContinue | Write-Host
 
 # Run 5: Myth with a mock OpenAI-compatible model (ci/mock_chat.py): a streamed chat reply on
 # the home page, then a question typed in the address bar on a web page. The open build never

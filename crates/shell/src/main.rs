@@ -578,9 +578,10 @@ impl ApplicationHandler<WakeUp> for App {
             .unwrap_or_default();
         let user_agent = ua_mode.user_agent(UaOs::current());
         info!("user agent ({}): {user_agent}", ua_mode.as_str());
-        // Settings > Cookies "Stay signed in" (`persist_cookies`, default off; never in a
-        // private session): Servo keeps its cookie jar (encrypted) and site storage in the
-        // profile. Read here because Servo takes it at start-up.
+        // Settings > Cookies "Stay signed in" (`persist_cookies`, on by default: a missing key
+        // is on, only an explicit "0" is off; never in a private session): Servo keeps its
+        // cookie jar (encrypted) and site storage in the profile. Read here because Servo
+        // takes it at start-up.
         let engine_data = cookies_host::persistent_engine_dir(
             mythbrowse_storage::default_profile_dir().as_deref(),
             cookies_host::persist_pref(ui_prefs_path.as_deref()),

@@ -30,9 +30,26 @@ use crate::chrome::ApiError;
 
 /// `<profile>/ui.json` key: keep cookies and site storage after MythBrowse closes (Servo gets
 /// a profile `config_dir`, the cookie jar is encrypted at rest). Read before the engine
-/// starts, so a change applies at the next start. **Default off** until the founder decides
-/// (docs/COOKIES.md, "Staying signed in").
+/// starts, so a change applies at the next start. **On by default** (see
+/// [`persist_cookies_from_pref`]); never in a private session (docs/COOKIES.md, "Staying
+/// signed in").
 pub const PREF_PERSIST_COOKIES: &str = "persist_cookies";
+
+/// "Stay signed in" when `ui.json` has no [`PREF_PERSIST_COOKIES`] value (new profile, or a
+/// profile from before 0.4.2 where the switch was never touched).
+pub const PERSIST_COOKIES_DEFAULT: bool = true;
+
+/// Whether cookies are kept after restart, from the saved [`PREF_PERSIST_COOKIES`] value:
+/// only an explicit `"0"` (the user turned the switch off) turns it off; `"1"`, a missing key
+/// or an unreadable value give [`PERSIST_COOKIES_DEFAULT`]. A private session never keeps
+/// cookies whatever this says (checked by the shell).
+pub fn persist_cookies_from_pref(value: Option<&str>) -> bool {
+    match value.map(str::trim) {
+        Some("0") => false,
+        Some("1") => true,
+        _ => PERSIST_COOKIES_DEFAULT,
+    }
+}
 
 /// Profile pref holding [`CookiePolicies`] as JSON.
 pub const PREF_COOKIE_POLICY: &str = "cookie_policy";
@@ -445,6 +462,20 @@ mod tests {
         assert!(parse("cookies_prefs_save", &[("persist", "on")]).is_err());
         assert!(parse("cookies_prefs_save", &[("clear_on_exit", "yes")]).is_err());
         assert!(parse("cookies_prefs_save", &[]).is_err());
+    }
+
+    #[test]
+    fn persist_cookies_default_on_explicit_off_stays_off() {
+        // Missing key (new profile, or never touched before 0.4.2): on.
+        assert!(PERSIST_COOKIES_DEFAULT);
+        assert!(persist_cookies_from_pref(None));
+        // Explicit choices are kept.
+        assert!(persist_cookies_from_pref(Some("1")));
+        assert!(!persist_cookies_from_pref(Some("0")));
+        assert!(!persist_cookies_from_pref(Some(" 0 ")));
+        // Anything else is not an explicit "off": the default applies.
+        assert!(persist_cookies_from_pref(Some("")));
+        assert!(persist_cookies_from_pref(Some("yes")));
     }
 
     #[test]

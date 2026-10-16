@@ -20,7 +20,7 @@ const ok = (name, cond, got) => checks.push({ name, pass: !!cond, got });
 // ---- stateful mock ----------------------------------------------------------------------
 const day = 86400;
 const now = Math.floor(Date.now() / 1000);
-let C, POL, EXIT, KEEP = false;
+let C, POL, EXIT, KEEP = true, PRIV = false;
 function reset() {
   C = {
     "example.com": [
@@ -36,7 +36,7 @@ function reset() {
   };
   POL = { "github.com": "allow" };
   EXIT = false;
-  KEEP = false;
+  KEEP = true; // Stay signed in: on by default (0.4.2)
 }
 reset();
 const STORAGE = new Set(["example.com", "news.example.org"]);
@@ -47,7 +47,7 @@ function sites() {
     return { site: s, count: rows.length, size: rows.reduce((a, r) => a + r.size, 0), storage: STORAGE.has(s), policy: POL[s] || null };
   });
 }
-const sitesJson = () => ({ ok: true, sites: sites(), clear_on_exit: EXIT, persistent: false, persist_pref: KEEP,
+const sitesJson = () => ({ ok: true, sites: sites(), clear_on_exit: EXIT, persistent: !PRIV, persist_pref: KEEP, private: PRIV,
   third_party: { supported: false, note: "Blocking third-party cookies is not supported yet: the Servo engine MythBrowse uses does not tell its cookie store which site you are on. Block a tracker's site here instead." } });
 const siteJson = (s) => ({ ok: true, site: s, cookies: C[s] || [], count: (C[s] || []).length, policy: POL[s] || null });
 function mock(op, q) {
@@ -115,7 +115,7 @@ for (const [h, tag] of [[21, "dark"], [12, "light"]]) {
   ok(`${tag}: rail Cookies jumps to the section`, top >= 0 && top < 60, top);
   const names = await p.$$eval("#ck-sites .ck-name b", (e) => e.map((x) => x.textContent));
   ok(`${tag}: sites listed (cookies, storage-only, rules)`, JSON.stringify(names) === JSON.stringify(["example.com", "github.com", "news.example.org", "tracker.test"]), names);
-  ok(`${tag}: count, third-party note and persistence note shown`, (await p.textContent("#ck-count")) === "3" && /not supported yet/i.test(await p.textContent("#ck-3p")) && await p.isVisible("#ck-persist"));
+  ok(`${tag}: count and third-party note shown, no "not kept" note (cookies are kept)`, (await p.textContent("#ck-count")) === "3" && /not supported yet/i.test(await p.textContent("#ck-3p")) && !(await p.isVisible("#ck-persist")));
   ok(`${tag}: Allow shown for github.com`, await p.evaluate(() => document.querySelector('.ck-site[data-site="github.com"] .seg-btn.on')?.textContent) === "Allow");
   await p.locator("#cookies-panel").screenshot({ path: `${OUT}/cookies-section-${tag}.png` });
 
@@ -139,15 +139,20 @@ for (const [h, tag] of [[21, "dark"], [12, "light"]]) {
     ok("clicking the active policy again -> default", last("cookie_policy")?.q.mode === "default");
     await p.click("#ck-exit"); await p.waitForTimeout(300);
     ok("Clear on exit switch -> cookies_prefs_save", last("cookies_prefs_save")?.q.clear_on_exit === "1" && await p.getAttribute("#ck-exit", "aria-checked") === "true");
-    // Stay signed in (v0.4.2 prep): off by default, applies after a restart.
-    ok("Stay signed in switch off by default", await p.getAttribute("#ck-keep", "aria-checked") === "false");
+    // Stay signed in: on by default (0.4.2), a change applies after a restart.
+    ok("Stay signed in switch on by default", await p.getAttribute("#ck-keep", "aria-checked") === "true" && KEEP === true);
+    await p.click("#ck-keep"); await p.waitForTimeout(300);
+    const offTxt = await p.textContent("#ck-keep-val");
+    ok("Stay signed in off -> cookies_prefs_save persist=0, says after restart", last("cookies_prefs_save")?.q.persist === "0" && last("cookies_prefs_save")?.q.clear_on_exit == null
+      && await p.getAttribute("#ck-keep", "aria-checked") === "false" && /restart/i.test(offTxt), { q: last("cookies_prefs_save")?.q, offTxt });
     await p.click("#ck-keep"); await p.waitForTimeout(300);
     const keepTxt = await p.textContent("#ck-keep-val");
-    ok("Stay signed in -> cookies_prefs_save persist=1, says after restart", last("cookies_prefs_save")?.q.persist === "1" && last("cookies_prefs_save")?.q.clear_on_exit == null
+    ok("Stay signed in on again -> persist=1, says after restart", last("cookies_prefs_save")?.q.persist === "1"
       && await p.getAttribute("#ck-keep", "aria-checked") === "true" && /restart/i.test(keepTxt), { q: last("cookies_prefs_save")?.q, keepTxt });
-    ok("persist note still shown (this run does not keep cookies)", await p.isVisible("#ck-persist"));
-    await p.click("#ck-keep"); await p.waitForTimeout(300);
-    ok("Stay signed in off again", last("cookies_prefs_save")?.q.persist === "0" && await p.getAttribute("#ck-keep", "aria-checked") === "false");
+    ok("no \"not kept\" note while this run keeps cookies", !(await p.isVisible("#ck-persist")));
+    PRIV = true; await p.click("#ck-exit"); await p.waitForTimeout(300); PRIV = false;
+    ok("private window: says cookies are never kept, no persist note", /private window never keeps cookies/i.test(await p.textContent("#ck-keep-val")) && !(await p.isVisible("#ck-persist")));
+    await p.click("#ck-exit"); await p.waitForTimeout(300);
     const before = calls.length;
     await p.click("#ck-clear-all"); await p.waitForTimeout(150);
     ok("Clear all asks once before clearing", !calls.slice(before).some((c) => c.op === "site_data_clear") && /Sign out/.test(await p.textContent("#ck-clear-all")));

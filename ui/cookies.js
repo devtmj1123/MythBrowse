@@ -72,12 +72,14 @@
     setKeep(data.persist_pref);
     const kv = $("ck-keep-val");
     if (kv) {
-      kv.textContent = data.persist_pref !== data.persistent
+      kv.textContent = data.private
+        ? "A private window never keeps cookies: they end when it closes."
+        : data.persist_pref !== data.persistent
         ? (data.persist_pref ? "On after MythBrowse restarts: cookies will then be kept, encrypted for this user." : "Off after MythBrowse restarts: saved cookies are then deleted.")
         : "Stay signed in to sites after restart. Cookies are saved encrypted for this user; a change applies the next time MythBrowse starts.";
     }
     $("ck-3p").textContent = (data.third_party && data.third_party.note) || "";
-    $("ck-persist").hidden = data.persistent !== false;
+    $("ck-persist").hidden = data.persistent !== false || !!data.private;
     const q = $("ck-filter").value.trim().toLowerCase();
     const sites = (data.sites || []).filter((s) => !q || s.site.indexOf(q) >= 0);
     const withCookies = (data.sites || []).filter((s) => s.count > 0).length;

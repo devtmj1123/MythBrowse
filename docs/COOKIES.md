@@ -43,19 +43,30 @@ A "site" is the registrable domain (eTLD+1) the cookie jar files cookies under, 
   (their own subresources look first-party) and would not cover script-set cookies, so it is not
   offered; the UI shows "Not supported yet" and suggests blocking the tracker's site. Needs the
   top-level site plumbed through `Request` / `CoreResourceMsg` upstream.
-* **Cookies are not kept after MythBrowse closes (by default).** See "Staying signed in" below:
-  the switch exists but is off until the founder decides.
+* **Cookies are kept after MythBrowse closes by default** ("Staying signed in" below). With the
+  switch off, or in a private session, every cookie ends with the session.
 * Private sessions: the listing reads the public cookie jar only (Servo's
   `SiteDataManager::cookies_for_url` asks the public resource threads); clearing and blocking
   cover both.
 * SameSite is not shown (Servo 0.1.4 does not implement it in the store).
 
-## Staying signed in (v0.4.2 prep, default OFF)
+## Staying signed in (on by default since 0.4.2)
 
 Settings > Cookies > **Stay signed in** ("Stay signed in to sites after restart") writes
 `persist_cookies` = `1` / `0` to `<profile>/ui.json` (`cookies_prefs_save?persist=`). It is read
 before the engine starts, so a change applies at the next start; the row says so while the saved
-value and the running state differ. **The default stays off**; nothing turns it on by itself.
+value and the running state differ.
+
+**Default: on.** A missing `ui.json`, or one without `persist_cookies` (a new profile, or a
+profile whose switch was never touched), means on; only an explicit `"0"` (the user turned it
+off) means off, and that choice is kept across upgrades
+(`mythbrowse_engine::cookies_api::persist_cookies_from_pref`). A private session (`--private`)
+never keeps cookies, whatever the setting; its Cookies page says so.
+
+Upgrading from a build where the default was off: cookies of sessions run before the upgrade
+were never written to disk, so there is nothing to restore and sites are signed out once, at
+the first start after the upgrade. From then on, with the switch left on, sign-ins survive a
+clean exit and restart. A profile whose switch was explicitly turned off stays off.
 
 With it on (and never in a `--private` session):
 
@@ -75,7 +86,7 @@ With it on (and never in a `--private` session):
   If the key store cannot be used, cookies are simply not kept (logged), never written in the
   clear.
 
-What is kept, and the risks the founder should weigh:
+What is kept, and the risks:
 
 | Data | Where | Protection |
 | --- | --- | --- |

@@ -19,11 +19,13 @@
 //!   with "Allow" as the exception): applied in `shutdown()` and again at the next start in
 //!   case MythBrowse did not close cleanly.
 //! * Third-party cookie blocking: not offered (`cookies_api::THIRD_PARTY_NOTE`).
-//! * Keeping cookies after restart (v0.4.2 prep, `ui.json` `persist_cookies`, **default
-//!   off**): only then Servo gets `<profile>/engine-data` as its `config_dir`, and before it
-//!   starts [`persistent_engine_dir`] installs the jar encryption (servo-net patch 0003:
-//!   AES-256-GCM, key in the OS key store via `mythbrowse_passwords::crypto::JarSealer`).
-//!   Without it every cookie ends with the session (shown in the UI). See docs/COOKIES.md.
+//! * Keeping cookies after restart (Settings > Cookies "Stay signed in", `ui.json`
+//!   `persist_cookies`, **on by default** since 0.4.2: a missing key is on, only an explicit
+//!   `"0"` is off; never in a private session): Servo then gets `<profile>/engine-data` as its
+//!   `config_dir`, and before it starts [`persistent_engine_dir`] installs the jar encryption
+//!   (servo-net patch 0003: AES-256-GCM, key in the OS key store via
+//!   `mythbrowse_passwords::crypto::JarSealer`). With the switch off every cookie ends with the
+//!   session (shown in the UI). See docs/COOKIES.md.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -105,11 +107,15 @@ pub(crate) fn persistent_engine_dir(
     Some(dir)
 }
 
-/// The `persist_cookies` value in `<profile>/ui.json` (off when missing).
+/// The "Stay signed in" setting from `<profile>/ui.json`: on unless `persist_cookies` is an
+/// explicit `"0"` (a missing file or key is on, [`cookies_api::persist_cookies_from_pref`]).
+/// No profile at all (`None`) means nothing could be kept: off.
 pub(crate) fn persist_pref(ui_json: Option<&Path>) -> bool {
-    ui_json
-        .and_then(|p| crate::load_ui_pref(p, cookies_api::PREF_PERSIST_COOKIES))
-        .is_some_and(|v| v == "1")
+    ui_json.is_some_and(|p| {
+        cookies_api::persist_cookies_from_pref(
+            crate::load_ui_pref(p, cookies_api::PREF_PERSIST_COOKIES).as_deref(),
+        )
+    })
 }
 
 /// The registrable domain the cookie jar files `host`'s cookies under (servo-net's
@@ -291,6 +297,7 @@ impl AppState {
             "clear_on_exit": p.clear_on_exit,
             "persistent": PERSISTENT.load(Ordering::Relaxed),
             "persist_pref": persist_pref(self.prefs_path.as_deref()),
+            "private": crate::PRIVATE.load(Ordering::Relaxed),
             "third_party": { "supported": false, "note": cookies_api::THIRD_PARTY_NOTE },
         })
     }
@@ -411,5 +418,28 @@ mod tests {
         assert_eq!(u.scheme(), JAR_SCHEME);
         assert_eq!(u.host_str(), Some("example.co.uk"));
         assert!(control_url(JAR_SCHEME, "::1").is_none());
+    }
+
+    #[test]
+    fn persist_pref_default_on_explicit_off() {
+        let dir = std::env::temp_dir().join(format!(
+            "mb-persist-pref-{}-{}",
+            std::process::id(),
+            mythbrowse_storage::unix_now_ms()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ui = dir.join("ui.json");
+        // No ui.json yet (first start), or ui.json without the key: on.
+        assert!(persist_pref(Some(ui.as_path())));
+        std::fs::write(&ui, r#"{"ua_mode":"firefox"}"#).unwrap();
+        assert!(persist_pref(Some(ui.as_path())));
+        // The user's explicit choices are kept.
+        std::fs::write(&ui, r#"{"persist_cookies":"0"}"#).unwrap();
+        assert!(!persist_pref(Some(ui.as_path())));
+        std::fs::write(&ui, r#"{"persist_cookies":"1"}"#).unwrap();
+        assert!(persist_pref(Some(ui.as_path())));
+        // No profile: nothing can be kept.
+        assert!(!persist_pref(None));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

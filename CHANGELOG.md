@@ -47,6 +47,15 @@ First public release of the MythBrowse source under the Mozilla Public License 2
   already did (servo-script 0008). This narrows the timing side channel of `rsa` 0.9.10
   (RUSTSEC-2023-0071, "Marvin"), which has no fixed release yet; results are unchanged.
 
+### Cookies
+
+- Settings > Cookies > **Stay signed in** is now on by default: cookies (and site storage) are
+  kept after a clean exit, the cookie jar encrypted at rest (AES-256-GCM, key protected by
+  Windows DPAPI or the Linux Secret Service). Never in a private session. A profile where the
+  switch was turned off stays off. Cookies from sessions before this change were never saved,
+  so sites are signed out once at the first start after upgrading. `docs/COOKIES.md` has the
+  details; the Windows smoke test checks that a cookie survives a restart.
+
 ### Build
 
 - The declared minimum Rust version (`rust-version`) is 1.92, the toolchain pinned in

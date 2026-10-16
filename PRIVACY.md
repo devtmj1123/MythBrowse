@@ -1,6 +1,6 @@
 # MythBrowse privacy notice
 
-_Last updated: [DATE OF PUBLICATION]. Applies to MythBrowse built from this repository, version
+_Last updated: 16 October 2026. Applies to MythBrowse built from this repository, version
 0.4 and later. Official JustMyth builds publish their own notice with the differences listed
 in [Official builds](#official-builds)._
 
@@ -61,12 +61,13 @@ In your MythBrowse profile (`%LOCALAPPDATA%\MythBrowse Open Build` on Windows, `
 
 - browsing history, bookmarks, downloads list, open tabs (for session restore), site
   permissions and settings;
-- cookies, site storage and cache of the websites you visit. By default cookies are **not**
-  kept after MythBrowse closes. If you turn on Settings > Cookies > **Stay signed in** (off by
-  default, never in private sessions), cookies are saved in `engine-data\cookie_jar.sealed`,
+- cookies, site storage and cache of the websites you visit. Settings > Cookies > **Stay signed
+  in** is **on by default** (never in private sessions): cookies are kept after MythBrowse
+  closes so you stay signed in to sites. They are saved in `engine-data\cookie_jar.sealed`,
   encrypted (AES-256-GCM) with a key protected by Windows (DPAPI) or the Linux Secret Service;
   site storage (`localStorage`, IndexedDB) in that folder is not encrypted, and HTTP sign-in
-  passwords are never written. Turning the switch off deletes that folder at the next start;
+  passwords are never written. If you turn the switch off, cookies end when MythBrowse closes
+  and that folder is deleted at the next start;
 - saved Myth conversations (kept forever by default; you can choose 90 or 30 days); page text
   attached to a question is used for that one request and never saved;
 - saved passwords, encrypted with a key protected by Windows (DPAPI, your Windows account only)
