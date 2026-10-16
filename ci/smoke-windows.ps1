@@ -365,8 +365,9 @@ Write-Host "[smoke] run4c start 1 title: '$t1'"
 Shot "14-cookie-set"
 $v1 = if ($t1 -match "cookie (SET|KEPT) ([0-9a-f]+)") { $Matches[2] } else { "" }
 Close-Clean $p4c "run4c"
-$log4c = Get-Content (Join-Path $prof4c "logs\mythbrowse.log") -Raw -ErrorAction SilentlyContinue
-if ($log4c -notmatch "cookies: kept after restart") { Write-Host "[smoke] run4c: the default start did not keep cookies (log)"; $status = 1 }
+# The "cookies: kept after restart" line is logged before the engine's logger starts, so it
+# is not in any log: the default start is checked by the engine-data folder it creates.
+if (-not (Test-Path (Join-Path $prof4c "engine-data"))) { Write-Host "[smoke] run4c: the default start did not keep cookies (no engine-data)"; $status = 1 }
 if ($t1 -notmatch "cookie SET") { Write-Host "[smoke] run4c: expected a fresh profile to get a new cookie"; $status = 1 }
 $sealed = Join-Path $prof4c "engine-data\cookie_jar.sealed"
 if (-not (Test-Path $sealed)) { Write-Host "[smoke] run4c: no engine-data\cookie_jar.sealed after a clean exit"; $status = 1 }
